@@ -52,9 +52,10 @@
           chmod -R u+w src
           cd src
           export HOME=$TMPDIR
+          export CGO_ENABLED=0
           export GOCACHE=$TMPDIR/go-cache
           export GOPATH=$TMPDIR/go
-          export GOFLAGS=-mod=mod
+          export GOFLAGS=-mod=vendor
           export GOPROXY=off
           bash scripts/gate.sh
           touch $out

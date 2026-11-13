@@ -1,11 +1,11 @@
 ---
 # atuin-threads-tui-w2e2
 title: Read atuin history
-status: in-progress
+status: completed
 type: epic
 priority: normal
 created_at: 2026-11-13T10:26:12Z
-updated_at: 2026-11-13T12:08:18Z
+updated_at: 2026-11-13T12:10:53Z
 parent: atuin-threads-tui-i1s6
 ---
 

@@ -1,10 +1,11 @@
 ---
 # atuin-threads-tui-i1s6
 title: 01 - Foundation and data access
-status: todo
+status: completed
 type: milestone
+priority: normal
 created_at: 2026-11-13T10:26:03Z
-updated_at: 2026-11-13T10:26:03Z
+updated_at: 2026-11-13T12:10:53Z
 ---
 
 Project skeleton, Go module, Nix flake, and read-only access to the atuin history database so the TUI has something to show.

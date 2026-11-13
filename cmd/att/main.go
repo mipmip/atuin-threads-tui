@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/mipmip/atuin-threads-tui/internal/atuin"
+	"github.com/mipmip/atuin-threads-tui/internal/ui"
 )
 
 const version = "0.1.0"
@@ -19,6 +24,12 @@ Flags:
   --version   print version and exit
   -h, --help  show this help
 `
+
+var runProgram = func(m tea.Model, out io.Writer) error {
+	program := tea.NewProgram(m, tea.WithOutput(out))
+	_, err := program.Run()
+	return err
+}
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -48,6 +59,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintln(stderr, "att: terminal UI is not wired up yet")
-	return 1
+	if err := runProgram(ui.New(atuin.New()), stdout); err != nil {
+		fmt.Fprintf(stderr, "att: %v\n", err)
+		return 1
+	}
+
+	return 0
 }
