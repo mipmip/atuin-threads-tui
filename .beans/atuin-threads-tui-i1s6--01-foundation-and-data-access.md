@@ -6,6 +6,7 @@ type: milestone
 priority: normal
 created_at: 2026-11-13T10:26:03Z
 updated_at: 2026-11-13T12:10:53Z
+openspec-link: openspec/changes/archive/2026-11-13-atuin-threads-client
 ---
 
 Project skeleton, Go module, Nix flake, and read-only access to the atuin history database so the TUI has something to show.
