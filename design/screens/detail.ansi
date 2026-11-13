@@ -1,0 +1,36 @@
+[1m[38;5;205matt[0m[38;5;241m · atuin threads[39m
+[1m[38;5;205mBuild a testable version[0m
+[38;5;241mopencode · deepseek-v4.1-flash · 4b160473 · 90 msgs · 38m ago[39m
+[38;5;241m/tmp/opensessions[39m
+
+[1m[38;5;241m[system][0m[38;5;241m 12:12[39m
+
+[1m[38;5;45m[user][0m[38;5;241m 12:12[39m
+  can you build this so I can test it
+
+[1m[38;5;42m[assistant][0m[38;5;241m 12:13[39m
+[38;5;241m  Reasoning · 97 tokens[39m
+  I'll check the repo state to see what needs building.
+  tool shell
+    {"command":"rtk git status && rtk git log --oneline -5"}
+  result
+    [rtk] /!\ No hook installed — run `rtk init -g` for automatic token savings
+    * main...origin/main
+    clean — nothing to commit
+    a383e9f chore: release 0.2.0-alpha.12
+    4262024 chore: release 0.2.0-alpha.11
+    097597d chore: bump version to 0.2.0-alpha.10 [skip ci]
+    a9cd50c chore: release 0.2.0-alpha.9
+    ... (1 more lines)
+
+[1m[38;5;241m[system][0m[38;5;241m 12:13[39m
+
+[1m[38;5;42m[assistant][0m[38;5;241m 12:13[39m
+[38;5;241m  Reasoning · 143 tokens[39m
+  tool shell
+    {"command":"ls -la /tmp/opensessions && rtk git status --porcelain -uall | head -50"}
+  result
+    total 240
+    drwxr-xr-x 10 pim users 4096 13 nov 13:12 .
+[38;5;241m4b160473 · 94 messages · line 1 of 1219[39m
+[38;5;241mj/k scroll · pgup/pgdn page · g/G top/bottom · esc back · q quit[39m
