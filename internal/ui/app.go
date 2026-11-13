@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,6 +15,7 @@ type mode int
 const (
 	modeList mode = iota
 	modeDetail
+	modeFilter
 )
 
 type threadsMsg struct {
@@ -24,6 +26,12 @@ type threadsMsg struct {
 type conversationMsg struct {
 	conversation atuin.Conversation
 	err          error
+}
+
+type searchMsg struct {
+	query   string
+	threads []atuin.Thread
+	err     error
 }
 
 // Model is the bubbletea model for the browser.
@@ -38,6 +46,11 @@ type Model struct {
 	mode         mode
 	conversation atuin.Conversation
 	detailScroll int
+
+	filter      string
+	filterInput string
+	searchQuery string
+	searching   bool
 
 	width  int
 	height int
@@ -81,10 +94,11 @@ func (m Model) openThread() tea.Cmd {
 }
 
 func (m Model) selected() (atuin.Thread, bool) {
-	if m.cursor < 0 || m.cursor >= len(m.threads) {
+	threads := m.visible()
+	if m.cursor < 0 || m.cursor >= len(threads) {
 		return atuin.Thread{}, false
 	}
-	return m.threads[m.cursor], true
+	return threads[m.cursor], true
 }
 
 // Update handles terminal input and load results.
@@ -119,6 +133,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detailScroll = 0
 		return m, nil
 
+	case searchMsg:
+		m.searching = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		m.threads = msg.threads
+		m.searchQuery = msg.query
+		m.filter = ""
+		m.filterInput = ""
+		m.cursor = 0
+		m.offset = 0
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -132,17 +161,48 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	if m.mode == modeDetail {
+	switch m.mode {
+	case modeDetail:
 		return m.handleDetailKey(key)
+	case modeFilter:
+		return m.handleFilterKey(key, msg)
 	}
 
+	return m.handleListKey(key)
+}
+
+func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q":
 		return m, tea.Quit
 	case "ctrl+r":
 		m.loading = true
 		m.err = nil
+		m.searchQuery = ""
 		return m, m.listThreads()
+	case "/":
+		m.mode = modeFilter
+		m.filterInput = m.filter
+		return m, nil
+	case "esc":
+		if m.searchQuery != "" {
+			m.searchQuery = ""
+			m.filter = ""
+			m.filterInput = ""
+			m.loading = true
+			m.err = nil
+			return m, m.listThreads()
+		}
+		m.filter = ""
+		m.filterInput = ""
+		m.cursor = 0
+		m.offset = 0
+	case "ctrl+s":
+		if query := strings.TrimSpace(m.filter); query != "" {
+			m.searching = true
+			m.err = nil
+			return m, m.searchThreads()
+		}
 	case "j", "down":
 		m.cursor++
 	case "k", "up":
@@ -150,7 +210,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "g", "home":
 		m.cursor = 0
 	case "G", "end":
-		m.cursor = len(m.threads) - 1
+		m.cursor = len(m.visible()) - 1
 	case "enter":
 		return m, m.openThread()
 	}
@@ -184,7 +244,8 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) clampCursor() {
-	if len(m.threads) == 0 {
+	threads := m.visible()
+	if len(threads) == 0 {
 		m.cursor = 0
 		m.offset = 0
 		return
@@ -192,8 +253,8 @@ func (m *Model) clampCursor() {
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
-	if m.cursor >= len(m.threads) {
-		m.cursor = len(m.threads) - 1
+	if m.cursor >= len(threads) {
+		m.cursor = len(threads) - 1
 	}
 
 	height := m.bodyHeight()
@@ -206,7 +267,7 @@ func (m *Model) clampCursor() {
 	if m.cursor >= m.offset+height {
 		m.offset = m.cursor - height + 1
 	}
-	if maxOffset := len(m.threads) - height; m.offset > maxOffset {
+	if maxOffset := len(threads) - height; m.offset > maxOffset {
 		m.offset = maxOffset
 	}
 	if m.offset < 0 {

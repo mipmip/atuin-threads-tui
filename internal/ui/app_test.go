@@ -19,11 +19,15 @@ var ansi = regexp.MustCompile("\x1b\\[[0-9;]*m")
 func plain(s string) string { return ansi.ReplaceAllString(s, "") }
 
 type fakeSource struct {
-	threads      []atuin.Thread
-	conversation atuin.Conversation
-	listErr      error
-	showErr      error
-	showID       string
+	threads       []atuin.Thread
+	conversation  atuin.Conversation
+	listErr       error
+	showErr       error
+	showID        string
+	searchResults []atuin.Thread
+	searchErr     error
+	searchQuery   string
+	searchLimit   int
 }
 
 func (f *fakeSource) List(context.Context) ([]atuin.Thread, error) {
@@ -35,8 +39,10 @@ func (f *fakeSource) Show(_ context.Context, id string) (atuin.Conversation, err
 	return f.conversation, f.showErr
 }
 
-func (f *fakeSource) Search(context.Context, string, int) ([]atuin.Thread, error) {
-	return nil, nil
+func (f *fakeSource) Search(_ context.Context, query string, limit int) ([]atuin.Thread, error) {
+	f.searchQuery = query
+	f.searchLimit = limit
+	return f.searchResults, f.searchErr
 }
 
 func sampleThreads() []atuin.Thread {

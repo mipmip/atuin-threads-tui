@@ -62,16 +62,21 @@ func (m Model) body() string {
 			mutedStyle.Render("enable capture with: atuin config enable threads")
 	}
 
+	threads := m.visible()
+	if len(threads) == 0 {
+		return mutedStyle.Render("no thread matches the filter")
+	}
+
 	height := m.bodyHeight()
 	end := m.offset + height
-	if end > len(m.threads) {
-		end = len(m.threads)
+	if end > len(threads) {
+		end = len(threads)
 	}
 
 	rows := make([]string, 0, height)
 	now := m.now()
 	for i := m.offset; i < end; i++ {
-		rows = append(rows, threadRow(m.width, m.threads[i], i == m.cursor, now))
+		rows = append(rows, threadRow(m.width, threads[i], i == m.cursor, now))
 	}
 	return strings.Join(rows, "\n")
 }
@@ -93,7 +98,15 @@ func (m Model) status() string {
 	if m.err != nil {
 		return errorStyle.Render("error: " + m.err.Error())
 	}
-	if m.mode == modeDetail {
+
+	switch m.mode {
+	case modeFilter:
+		counts := fmt.Sprintf("%d threads", len(m.threads))
+		if strings.TrimSpace(m.filterInput) != "" {
+			counts = fmt.Sprintf("%d of %d threads", len(m.visible()), len(m.threads))
+		}
+		return mutedStyle.Render("filter: ") + m.filterInput + "▌" + mutedStyle.Render("  "+counts)
+	case modeDetail:
 		return mutedStyle.Render(fmt.Sprintf(
 			"%s · %d messages · line %d of %d",
 			shortID(m.conversation.Session.AtuinID),
@@ -102,17 +115,31 @@ func (m Model) status() string {
 			len(m.detailLines()),
 		))
 	}
-	if m.loading {
+
+	visible := len(m.visible())
+	switch {
+	case m.searching:
+		return mutedStyle.Render("searching...")
+	case m.searchQuery != "":
+		return mutedStyle.Render(fmt.Sprintf("%d results for %q", visible, m.searchQuery))
+	case m.filter != "":
+		return mutedStyle.Render(fmt.Sprintf("%d of %d threads", visible, len(m.threads)))
+	case m.loading:
 		return mutedStyle.Render("loading")
+	default:
+		return mutedStyle.Render(fmt.Sprintf("%d threads", len(m.threads)))
 	}
-	return mutedStyle.Render(fmt.Sprintf("%d threads", len(m.threads)))
 }
 
 func (m Model) hints() string {
-	if m.mode == modeDetail {
+	switch m.mode {
+	case modeDetail:
 		return mutedStyle.Render("j/k scroll · pgup/pgdn page · g/G top/bottom · esc back · q quit")
+	case modeFilter:
+		return mutedStyle.Render("type to filter · enter apply · ctrl+u reset · esc clear")
+	default:
+		return mutedStyle.Render("j/k move · enter read · / filter · ctrl+s full-text · ctrl+r reload · q quit")
 	}
-	return mutedStyle.Render("j/k move · enter read · g/G first/last · ctrl+r reload · q quit")
 }
 
 func threadRow(width int, t atuin.Thread, selected bool, now time.Time) string {
