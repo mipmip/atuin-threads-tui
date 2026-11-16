@@ -6,9 +6,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
-- Press `v` in a conversation to select a range of messages, `y` to copy it as Markdown, `w` to write it to a file, and `e` to export the whole thread.
+## [0.1.0] - 2026-11-16
 
+### Added
+- Press `v` in a conversation to select a range of messages, `y` to copy it as
+  Markdown, `w` to write it to a file, and `e` to export the whole thread.
 - A message type panel, opened with `t` in a conversation, hides prompts,
   replies, thinking, tool calls, tool results, patches, summaries, or notes and
   keeps the selection for the rest of the session.
@@ -16,13 +18,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and deletions red, and tool calls colour the verb, the path, and the command.
 - A one cell scrollbar in the right margin of the conversation view shows how
   long the thread is and where the visible lines sit.
-
-### Fixed
-- Copying a selection no longer freezes the interface when the clipboard tool
-  leaves a background process behind.
+- Patch blocks and session summaries now appear in the conversation view.
 
 ### Changed
-
 - The conversation view renders a thread once and scrolls from that cache, so
   reading a long conversation no longer re-renders thousands of messages on
   every key press. Threads over 500 messages render in the background.
@@ -35,13 +33,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   placeholders give way to a token count.
 
 ### Fixed
-
+- Copying a selection no longer freezes the interface when the clipboard tool
+  leaves a background process behind.
 - Several keys that arrive in one input batch now each count, so a fast scroll
   is no longer swallowed.
 - Opening a thread with very long tool output is fast again: each line is cut in
   one pass instead of being rescanned and copied once per chunk.
-
-
-### Added
-
-- Patch blocks and session summaries now appear in the conversation view.
