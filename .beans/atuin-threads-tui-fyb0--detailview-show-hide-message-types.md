@@ -5,7 +5,8 @@ status: todo
 type: feature
 priority: normal
 created_at: 2026-11-16T14:31:36Z
-updated_at: 2026-11-16T14:33:37Z
+updated_at: 2026-11-16T14:49:21Z
+parent: atuin-threads-tui-s9te
 ---
 
 a multi select input should be available which lets the use choose what type of messages it sees. Other are hidden:

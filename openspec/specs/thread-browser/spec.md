@@ -51,10 +51,14 @@ is the body height minus two.
 
 ### Requirement: Read a thread
 
-The list SHALL open the selected thread with `enter` and show its title, harness,
-model, working directory, update time, and every message. Each message SHALL show
-its time, author, kind, and token usage in a meta column to the right of a body
-column no wider than 80 cells.
+The list SHALL open the selected thread with `enter` and show its title,
+harness, model, working directory, update time, and every message. The detail
+content SHALL keep a margin of one cell on the left and on the right. Each
+message SHALL show its time, author, kind, and token usage in a 24-cell meta
+column pinned to the right edge of the window, and a body column SHALL fill the
+space between the left margin and that meta column. Prose SHALL wrap at 80
+cells; commands, diffs, patches, and tool output SHALL wrap at the width of the
+body column.
 
 #### Scenario: Open and return
 
@@ -74,10 +78,10 @@ column no wider than 80 cells.
 
 #### Scenario: Message meta column
 
-- **WHEN** a thread is open
-- **THEN** each message prints `HH:MM - author` and `kind - N tokens` in a 20 cell
-  column to the right of the body, and several blocks of one message join their
-  kinds
+- **WHEN** a thread is open in a 120-column terminal
+- **THEN** each message prints `HH:MM - author` and `kind - N tokens` in a 24
+  cell column that ends one cell before the window edge, and several blocks of
+  one message join their kinds
 
 #### Scenario: Tokens only where they exist
 
@@ -87,8 +91,9 @@ column no wider than 80 cells.
 
 #### Scenario: Body measured in cells
 
-- **WHEN** the terminal is wider than the body column plus the meta column
-- **THEN** the body stays at 80 cells and the remaining space stays empty
+- **WHEN** the terminal is 120 columns wide
+- **THEN** the body column is 92 cells, a prose line stops at 80 cells, and a
+  command of 92 cells stays on one row
 
 #### Scenario: Repeated empty messages collapse
 
@@ -107,6 +112,13 @@ column no wider than 80 cells.
 - **WHEN** a tool result contains indented lines
 - **THEN** the view keeps the indentation and wraps only lines longer than the
   body column
+
+#### Scenario: Frame has margins
+
+- **WHEN** a thread is open
+- **THEN** the first and the last cell of the window stay empty on every
+  content row, while the app header, status line, and key hints keep their
+  existing position
 
 #### Scenario: Patch and summary blocks
 
@@ -143,7 +155,10 @@ the cached total number of lines.
 The program SHALL re-render rows and wrapped message text when the terminal is
 resized, and SHALL NOT panic when the terminal is smaller than the fixed
 chrome. The width SHALL be part of the render cache key, so a rendering made for
-another width is never drawn.
+another width is never drawn. The body column SHALL be the window width minus
+the two margin cells, the gap, and the 24-cell meta column. Below 48 columns the
+meta column SHALL be dropped and the body SHALL take the width minus the two
+margin cells.
 
 #### Scenario: Very short terminal
 
@@ -153,8 +168,8 @@ another width is never drawn.
 #### Scenario: Rendering follows the width
 
 - **WHEN** the terminal is narrowed from 120 to 80 columns
-- **THEN** the message body is measured again at 80 columns and the meta column
-  is redrawn to its right
+- **THEN** the body column becomes 52 cells, prose wraps at 52 instead of 80,
+  and the meta column is redrawn against the right edge
 
 ### Requirement: Quit
 

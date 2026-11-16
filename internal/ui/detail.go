@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	detailBodyMax   = 80
+	detailProseMax  = 80
 	detailMetaWidth = 24
 	detailGap       = 2
+	detailMargin    = 1
 	detailBodyMin   = 20
 	maxToolPayload  = 4
 	maxMessageParts = 2
@@ -27,19 +28,18 @@ const (
 )
 
 type detailLayout struct {
-	body int
-	meta int
+	body  int
+	prose int
+	meta  int
 }
 
 func newDetailLayout(width int) detailLayout {
-	if width < detailBodyMin+detailGap+detailMetaWidth {
-		return detailLayout{body: max(width, 1)}
+	if width < detailBodyMin+detailGap+detailMetaWidth+2*detailMargin {
+		body := max(width-2*detailMargin, 1)
+		return detailLayout{body: body, prose: min(detailProseMax, body)}
 	}
-	body := width - detailGap - detailMetaWidth
-	if body > detailBodyMax {
-		body = detailBodyMax
-	}
-	return detailLayout{body: body, meta: detailMetaWidth}
+	body := width - 2*detailMargin - detailGap - detailMetaWidth
+	return detailLayout{body: body, prose: min(detailProseMax, body), meta: detailMetaWidth}
 }
 
 type messageView struct {
@@ -140,7 +140,7 @@ func (m Model) buildDetail() detailRendering {
 	if title == "" {
 		title = "(untitled)"
 	}
-	r.head = append(r.head, titleStyle.Render(truncate(title, layout.body)))
+	r.head = append(r.head, titleStyle.Render(" "+truncate(title, layout.body)))
 
 	var header []string
 	if session.Harness != "" {
@@ -159,17 +159,17 @@ func (m Model) buildDetail() detailRendering {
 		header = append(header, age(now(), session.UpdatedAt)+" ago")
 	}
 	if len(header) > 0 {
-		r.head = append(r.head, mutedStyle.Render(truncate(strings.Join(header, " · "), layout.body)))
+		r.head = append(r.head, mutedStyle.Render(" "+truncate(strings.Join(header, " · "), layout.body)))
 	}
 	if session.CWD != "" {
-		r.head = append(r.head, mutedStyle.Render(truncate(session.CWD, layout.body)))
+		r.head = append(r.head, mutedStyle.Render(" "+truncate(session.CWD, layout.body)))
 	}
 	r.head = append(r.head, "")
 	r.total = len(r.head)
 
 	views := make([]messageView, len(m.conversation.Messages))
 	for i, msg := range m.conversation.Messages {
-		views[i] = newMessageView(msg, layout.body)
+		views[i] = newMessageView(msg, layout.prose, layout.body)
 	}
 
 	for i := 0; i < len(views); {
@@ -193,13 +193,13 @@ func (m Model) buildDetail() detailRendering {
 }
 
 func (l detailLayout) rows(view messageView) []string {
-	if l.meta == 0 {
-		return view.body
+	total := detailMargin + l.body
+	if l.meta > 0 {
+		total += detailGap + l.meta
 	}
 
-	total := l.body + detailGap + l.meta
 	count := len(view.body)
-	if count < len(view.meta) {
+	if l.meta > 0 && count < len(view.meta) {
 		count = len(view.meta)
 	}
 
@@ -209,22 +209,27 @@ func (l detailLayout) rows(view messageView) []string {
 		if i < len(view.body) {
 			body = view.body[i]
 		}
+		if l.meta == 0 {
+			out[i] = strings.TrimRight(strings.Repeat(" ", detailMargin)+truncate(body, l.body), " ")
+			continue
+		}
 		var meta string
 		if i < len(view.meta) {
 			meta = view.meta[i]
 		}
 		if meta == "" {
-			out[i] = strings.TrimRight(truncate(body, l.body), " ")
+			out[i] = strings.TrimRight(strings.Repeat(" ", detailMargin)+truncate(body, l.body), " ")
 			continue
 		}
-		line := padRight(body, l.body) + strings.Repeat(" ", detailGap) + meta
+		line := strings.Repeat(" ", detailMargin) + padRight(body, l.body) +
+			strings.Repeat(" ", detailGap) + meta
 		out[i] = ansi.Truncate(line, total, "…")
 	}
 	return out
 }
 
-func newMessageView(msg atuin.Message, width int) messageView {
-	body := messageBody(msg, width)
+func newMessageView(msg atuin.Message, prose, code int) messageView {
+	body := messageBody(msg, prose, code)
 	if onlyBlank(body) {
 		body = nil
 	}
@@ -257,43 +262,43 @@ func collapsedView(messages []atuin.Message, first messageView) messageView {
 	}
 }
 
-func messageBody(msg atuin.Message, width int) []string {
+func messageBody(msg atuin.Message, prose, code int) []string {
 	var out []string
 	for _, block := range msg.Content {
-		out = append(out, blockLines(block, width)...)
+		out = append(out, blockLines(block, prose, code)...)
 	}
 	return out
 }
 
-func blockLines(block atuin.Content, width int) []string {
-	if width < 1 {
-		width = 1
+func blockLines(block atuin.Content, prose, code int) []string {
+	if prose < 1 {
+		prose = 1
 	}
-	if width > detailBodyMax {
-		width = detailBodyMax
+	if code < 1 {
+		code = 1
 	}
 
 	switch block.Type {
 	case "text":
-		return wrap(block.Text, width)
+		return wrap(block.Text, prose)
 
 	case "thinking":
 		if placeholderThinking(block.Text) {
 			return nil
 		}
-		return styleAll(wrap(block.Text, width), mutedStyle.Render)
+		return styleAll(wrap(block.Text, prose), mutedStyle.Render)
 
 	case "tool_call":
-		return toolCallLines(block, width)
+		return toolCallLines(block, code)
 
 	case "tool_result":
-		return resultLines(block, width)
+		return resultLines(block, code)
 
 	case "patch":
-		return patchLines(block, width)
+		return patchLines(block, code)
 
 	case "summary":
-		return wrap(block.Text, width)
+		return wrap(block.Text, prose)
 	}
 
 	name := strings.TrimSpace(block.Type)

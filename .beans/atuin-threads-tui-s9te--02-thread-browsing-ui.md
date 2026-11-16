@@ -1,12 +1,11 @@
 ---
 # atuin-threads-tui-s9te
 title: 02 - Thread browsing UI
-status: completed
+status: in-progress
 type: milestone
 priority: normal
 created_at: 2026-11-13T10:26:03Z
-updated_at: 2026-11-13T12:21:17Z
-openspec-link: openspec/changes/archive/2026-11-13-thread-search-filter
+updated_at: 2026-11-16T14:49:33Z
 ---
 
 The terminal interface itself: list threads, drill into commands, search, and keyboard navigation.
