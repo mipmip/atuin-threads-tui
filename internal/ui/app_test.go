@@ -216,11 +216,11 @@ func TestOpenAndCloseThread(t *testing.T) {
 	view := plain(m.View())
 	for _, want := range []string{
 		"OpenSpec and Beans project bootstrap",
-		"[user]",
-		"[assistant]",
+		"- user",
+		"- asst",
 		"hello there",
-		"tool shell",
-		"result",
+		"shell",
+		"$ ls",
 		"README.md",
 		"/home/pim/gh.mipmip/atuin-threads-tui",
 	} {
@@ -418,7 +418,7 @@ func TestWrap(t *testing.T) {
 }
 
 func TestBlockLines(t *testing.T) {
-	if got := blockLines(atuin.Content{Type: "text", Text: "hello"}, 40); len(got) != 1 || got[0] != "  hello" {
+	if got := blockLines(atuin.Content{Type: "text", Text: "hello"}, 40); len(got) != 1 || got[0] != "hello" {
 		t.Errorf("text block = %q", got)
 	}
 
@@ -428,7 +428,7 @@ func TestBlockLines(t *testing.T) {
 	}
 
 	result := blockLines(atuin.Content{Type: "tool_result", Content: "boom", IsError: true}, 40)
-	if !strings.Contains(plain(strings.Join(result, " ")), "result (error)") {
+	if !strings.Contains(plain(strings.Join(result, " ")), "! boom") {
 		t.Errorf("error result = %q", result)
 	}
 
@@ -444,7 +444,7 @@ func TestBlockLines(t *testing.T) {
 		t.Errorf("missing truncation note: %q", plain(cappedLines[maxBlockLines]))
 	}
 
-	if got := blockLines(atuin.Content{Type: "unknown"}, 40); got != nil {
-		t.Errorf("unknown block = %q, want nil", got)
+	if got := blockLines(atuin.Content{Type: "unknown"}, 40); len(got) != 1 || !strings.Contains(plain(got[0]), "unknown") {
+		t.Errorf("unknown block = %q, want a label", got)
 	}
 }

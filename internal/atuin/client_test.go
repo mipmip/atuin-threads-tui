@@ -225,3 +225,56 @@ func TestMissingBinary(t *testing.T) {
 		t.Fatalf("error = %v, want a listing error", err)
 	}
 }
+
+const usageFixture = `{
+  "session": {"atuin_id": "01a1d43c1f237541a0e1c6c42cf53ec4", "title": "Usage"},
+  "messages": [
+    {
+      "id": "m1",
+      "role": "assistant",
+      "timestamp": "2026-11-12T09:00:01Z",
+      "cwd": "/home/pim/work/one",
+      "model": "deepseek-v4.1-flash",
+      "tokens": {"input": 2040, "output": 517, "cache_read": 49792, "cache_write": 0, "reasoning": 62},
+      "content": [
+        {"type": "patch", "tool_use_id": "p1", "files": [
+          {"path": "flake.nix", "change": "update", "additions": 2, "deletions": 2, "diff": "@@ -1 +1 @@"}
+        ]}
+      ]
+    },
+    {"id": "m2", "role": "tool", "timestamp": "2026-11-12T09:00:02Z", "content": []}
+  ]
+}`
+
+func TestShowDecodesUsageAndPatchFiles(t *testing.T) {
+	c := New(WithRunner(fakeRunner(usageFixture, nil, nil)))
+
+	conversation, err := c.Show(context.Background(), "01a1d43c1f237541a0e1c6c42cf53ec4")
+	if err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+
+	first := conversation.Messages[0]
+	if first.Model != "deepseek-v4.1-flash" {
+		t.Errorf("model = %q", first.Model)
+	}
+	if first.Tokens == nil {
+		t.Fatal("tokens not decoded")
+	}
+	if first.Tokens.Output != 517 || first.Tokens.Reasoning != 62 || first.Tokens.CacheRead != 49792 {
+		t.Errorf("tokens = %+v", *first.Tokens)
+	}
+
+	files := first.Content[0].Files
+	if len(files) != 1 {
+		t.Fatalf("files = %#v, want one", files)
+	}
+	want := PatchFile{Path: "flake.nix", Change: "update", Additions: 2, Deletions: 2, Diff: "@@ -1 +1 @@"}
+	if files[0] != want {
+		t.Errorf("file = %+v, want %+v", files[0], want)
+	}
+
+	if conversation.Messages[1].Tokens != nil {
+		t.Errorf("message without usage decoded tokens: %+v", conversation.Messages[1].Tokens)
+	}
+}

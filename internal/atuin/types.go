@@ -32,15 +32,25 @@ type Thread struct {
 	LastReply    string    `json:"last_reply"`
 }
 
+// PatchFile is one file changed by a patch block.
+type PatchFile struct {
+	Path      string `json:"path"`
+	Change    string `json:"change"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Diff      string `json:"diff"`
+}
+
 // Content is one block inside a message.
 type Content struct {
-	Type      string `json:"type"`
-	Text      string `json:"text"`
-	Name      string `json:"name"`
-	Input     string `json:"input"`
-	ToolUseID string `json:"tool_use_id"`
-	Content   string `json:"content"`
-	IsError   bool   `json:"is_error"`
+	Type      string      `json:"type"`
+	Text      string      `json:"text"`
+	Name      string      `json:"name"`
+	Input     string      `json:"input"`
+	ToolUseID string      `json:"tool_use_id"`
+	Content   string      `json:"content"`
+	IsError   bool        `json:"is_error"`
+	Files     []PatchFile `json:"files"`
 }
 
 // Message is one recorded turn in a thread.
@@ -49,6 +59,8 @@ type Message struct {
 	Role       string    `json:"role"`
 	Timestamp  time.Time `json:"timestamp"`
 	CWD        string    `json:"cwd"`
+	Model      string    `json:"model"`
+	Tokens     *Tokens   `json:"tokens"`
 	Content    []Content `json:"content"`
 	StopReason string    `json:"stop_reason"`
 }
