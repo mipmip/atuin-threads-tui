@@ -28,19 +28,21 @@ jobs:
       - name: Collect release notes
         run: |
           version="${GITHUB_REF_NAME#v}"
-          : > notes.md
+          notes="${RUNNER_TEMP}/notes.md"
+          : > "$notes"
           awk -v want="## [$version]" '
             index($0, want) == 1 { found = 1; next }
             found && /^## \[/ { exit }
             found { print }
-          ' CHANGELOG.md > notes.md
-          test -s notes.md || : > notes.md
+          ' CHANGELOG.md > "$notes"
+          test -s "$notes" || : > "$notes"
+          echo "NOTES=${notes}" >> "$GITHUB_ENV"
 
       - name: Release
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes notes.md
+          args: release --clean --release-notes ${{ env.NOTES }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
