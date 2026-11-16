@@ -418,16 +418,16 @@ func TestWrap(t *testing.T) {
 }
 
 func TestBlockLines(t *testing.T) {
-	if got := blockLines(atuin.Content{Type: "text", Text: "hello"}, 40, 40); len(got) != 1 || got[0] != "hello" {
+	if got := blockLines(atuin.Content{Type: "text", Text: "hello"}, 40, 40, nil); len(got) != 1 || got[0] != "hello" {
 		t.Errorf("text block = %q", got)
 	}
 
-	thinking := blockLines(atuin.Content{Type: "thinking", Text: "hmm"}, 40, 40)
+	thinking := blockLines(atuin.Content{Type: "thinking", Text: "hmm"}, 40, 40, nil)
 	if len(thinking) != 1 || !strings.Contains(plain(thinking[0]), "hmm") {
 		t.Errorf("thinking block = %q", thinking)
 	}
 
-	result := blockLines(atuin.Content{Type: "tool_result", Content: "boom", IsError: true}, 40, 40)
+	result := blockLines(atuin.Content{Type: "tool_result", Content: "boom", IsError: true}, 40, 40, nil)
 	if !strings.Contains(plain(strings.Join(result, " ")), "! boom") {
 		t.Errorf("error result = %q", result)
 	}
@@ -436,7 +436,7 @@ func TestBlockLines(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fmt.Fprintf(&input, "line%d\n", i)
 	}
-	cappedLines := blockLines(atuin.Content{Type: "tool_call", Name: "shell", Input: input.String()}, 40, 40)
+	cappedLines := blockLines(atuin.Content{Type: "tool_call", Name: "shell", Input: input.String()}, 40, 40, nil)
 	if len(cappedLines) != maxBlockLines+1 {
 		t.Fatalf("capped block has %d lines, want %d", len(cappedLines), maxBlockLines+1)
 	}
@@ -444,7 +444,7 @@ func TestBlockLines(t *testing.T) {
 		t.Errorf("missing truncation note: %q", plain(cappedLines[maxBlockLines]))
 	}
 
-	if got := blockLines(atuin.Content{Type: "unknown"}, 40, 40); len(got) != 1 || !strings.Contains(plain(got[0]), "unknown") {
+	if got := blockLines(atuin.Content{Type: "unknown"}, 40, 40, nil); len(got) != 1 || !strings.Contains(plain(got[0]), "unknown") {
 		t.Errorf("unknown block = %q, want a label", got)
 	}
 }

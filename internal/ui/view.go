@@ -36,6 +36,14 @@ var (
 	userStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("45"))
 	assistantStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
 	systemStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("241"))
+
+	promptStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("45"))
+	replyStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	commandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("222"))
+	additionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	deletionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	hunkStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("45"))
+	pathStyle     = lipgloss.NewStyle().Bold(true)
 )
 
 // View renders the whole screen.

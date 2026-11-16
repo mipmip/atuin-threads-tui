@@ -201,7 +201,7 @@ func TestDetailProseKeepsItsMeasure(t *testing.T) {
 
 	for _, width := range []int{160, 120, 80} {
 		layout := newDetailLayout(width)
-		for _, line := range blockLines(block, layout.prose, layout.body) {
+		for _, line := range blockLines(block, layout.prose, layout.body, nil) {
 			if got := ansi.StringWidth(line); got > layout.prose {
 				t.Fatalf("width %d: prose line is %d cells, want at most %d: %q",
 					width, got, layout.prose, line)
@@ -489,7 +489,7 @@ func TestPatchBlock(t *testing.T) {
 }
 
 func TestSummaryBlockRenders(t *testing.T) {
-	lines := blockLines(atuin.Content{Type: "summary", Text: "Summarizing 18 earlier messages"}, 80, 92)
+	lines := blockLines(atuin.Content{Type: "summary", Text: "Summarizing 18 earlier messages"}, 80, 92, nil)
 	if len(lines) != 1 || lines[0] != "Summarizing 18 earlier messages" {
 		t.Errorf("summary = %q", lines)
 	}
@@ -516,10 +516,10 @@ func TestProseCombiningMarks(t *testing.T) {
 }
 
 func TestPlaceholderThinkingIsHidden(t *testing.T) {
-	if lines := blockLines(atuin.Content{Type: "thinking", Text: "Reasoning · 83 tokens"}, 80, 92); lines != nil {
+	if lines := blockLines(atuin.Content{Type: "thinking", Text: "Reasoning · 83 tokens"}, 80, 92, nil); lines != nil {
 		t.Errorf("placeholder thinking rendered: %q", lines)
 	}
-	if lines := blockLines(atuin.Content{Type: "thinking", Text: "Reasoning about the tokens"}, 80, 92); len(lines) == 0 {
+	if lines := blockLines(atuin.Content{Type: "thinking", Text: "Reasoning about the tokens"}, 80, 92, nil); len(lines) == 0 {
 		t.Error("real thinking text was hidden")
 	}
 }

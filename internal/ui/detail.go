@@ -311,14 +311,32 @@ func collapsedView(messages []atuin.Message, first messageView) messageView {
 }
 
 func messageBody(msg atuin.Message, prose, code int, hidden typeMask) []string {
+	style := roleProseStyle(msg.Role)
 	var out []string
 	for _, block := range visibleBlocks(msg, hidden) {
-		out = append(out, blockLines(block, prose, code)...)
+		out = append(out, blockLines(block, prose, code, style)...)
 	}
 	return out
 }
 
-func blockLines(block atuin.Content, prose, code int) []string {
+func roleProseStyle(role string) func(...string) string {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "user":
+		return promptStyle.Render
+	case "assistant":
+		return replyStyle.Render
+	}
+	return nil
+}
+
+func styled(style func(...string) string, line string) string {
+	if style == nil {
+		return line
+	}
+	return style(line)
+}
+
+func blockLines(block atuin.Content, prose, code int, proseStyle func(...string) string) []string {
 	if prose < 1 {
 		prose = 1
 	}
@@ -328,7 +346,7 @@ func blockLines(block atuin.Content, prose, code int) []string {
 
 	switch block.Type {
 	case "text":
-		return wrap(block.Text, prose)
+		return styleAll(wrap(block.Text, prose), proseStyle)
 
 	case "thinking":
 		if placeholderThinking(block.Text) {
@@ -392,7 +410,7 @@ func toolCallLines(block atuin.Content, width int) []string {
 }
 
 func shellLines(name string, input map[string]any, width int) []string {
-	head := name
+	head := titleStyle.Render(name)
 	if description := field(input, "description"); description != "" {
 		head += "  " + description
 	}
@@ -409,25 +427,39 @@ func shellLines(name string, input map[string]any, width int) []string {
 	}
 	for i, part := range parts {
 		if i == 0 {
-			lines = append(lines, "  $ "+part)
+			lines = append(lines, "  $ "+commandStyle.Render(part))
 			continue
 		}
-		lines = append(lines, "    "+part)
+		lines = append(lines, "    "+commandStyle.Render(part))
 	}
 	return capped(lines)
+}
+
+func headSuffix(head, suffix string, width int) string {
+	if room := width - ansi.StringWidth(suffix); room >= 4 {
+		return truncate(head, room) + suffix
+	}
+	return truncate(head, width)
+}
+
+func countsSuffix(additions, deletions int) string {
+	return "  " + additionStyle.Render(fmt.Sprintf("+%d", additions)) +
+		" " + deletionStyle.Render(fmt.Sprintf("-%d", deletions))
 }
 
 func writeLines(name string, input map[string]any, width int) []string {
 	path := firstField(input, "file_path", "path")
 	content := field(input, "content")
-	head := name
+	head := titleStyle.Render(name)
 	if path != "" {
-		head += " " + path
+		head += " " + pathStyle.Render(path)
 	}
 	if count := countLines(content); count > 0 {
-		head += fmt.Sprintf("  +%d lines", count)
+		head = headSuffix(head, "  "+additionStyle.Render(fmt.Sprintf("+%d", count))+" lines", width)
+	} else {
+		head = truncate(head, width)
 	}
-	lines := []string{truncate(head, width)}
+	lines := []string{head}
 
 	for i, part := range preserve(content, width-2) {
 		if i >= 3 {
@@ -443,21 +475,23 @@ func editLines(name string, input map[string]any, width int) []string {
 	oldText := strings.TrimSpace(firstField(input, "old_string", "oldString"))
 	newText := strings.TrimSpace(firstField(input, "new_string", "newString"))
 
-	head := name
+	head := titleStyle.Render(name)
 	if path != "" {
-		head += " " + path
+		head += " " + pathStyle.Render(path)
 	}
 	if oldText != "" || newText != "" {
-		head += fmt.Sprintf("  +%d -%d", countLines(newText), countLines(oldText))
+		head = headSuffix(head, countsSuffix(countLines(newText), countLines(oldText)), width)
+	} else {
+		head = truncate(head, width)
 	}
-	lines := []string{truncate(head, width)}
+	lines := []string{head}
 
-	lines = append(lines, prefixedLines(oldText, "- ", width)...)
-	lines = append(lines, prefixedLines(newText, "+ ", width)...)
+	lines = append(lines, prefixedLines(oldText, "- ", width, deletionStyle.Render)...)
+	lines = append(lines, prefixedLines(newText, "+ ", width, additionStyle.Render)...)
 	return capped(lines)
 }
 
-func prefixedLines(text, prefix string, width int) []string {
+func prefixedLines(text, prefix string, width int, style func(...string) string) []string {
 	if text == "" {
 		return nil
 	}
@@ -468,19 +502,19 @@ func prefixedLines(text, prefix string, width int) []string {
 	var out []string
 	for i, part := range parts {
 		if i == 0 {
-			out = append(out, "  "+prefix+part)
+			out = append(out, "  "+prefix+styled(style, part))
 			continue
 		}
-		out = append(out, "    "+part)
+		out = append(out, "    "+styled(style, part))
 	}
 	return out
 }
 
 func readLines(name string, input map[string]any, width int) []string {
 	path := firstField(input, "file_path", "path")
-	head := name
+	head := titleStyle.Render(name)
 	if path != "" {
-		head += " " + path
+		head += " " + pathStyle.Render(path)
 	}
 	offset := intField(input, "offset")
 	limit := intField(input, "limit")
@@ -494,9 +528,9 @@ func readLines(name string, input map[string]any, width int) []string {
 }
 
 func skillLines(name string, input map[string]any, width int) []string {
-	head := name
+	head := titleStyle.Render(name)
 	if skill := field(input, "skill"); skill != "" {
-		head += " " + skill
+		head += " " + pathStyle.Render(skill)
 	}
 	line := truncate(head, width)
 	if args := field(input, "args"); args != "" {
@@ -509,7 +543,7 @@ func skillLines(name string, input map[string]any, width int) []string {
 }
 
 func compressLines(name string, input map[string]any, width int) []string {
-	head := name
+	head := titleStyle.Render(name)
 	if topic := field(input, "topic"); topic != "" {
 		head += " " + topic
 	}
@@ -526,7 +560,7 @@ func genericLines(name string, input map[string]any, width int) []string {
 		pairs = append(pairs, key+"="+truncate(value, 40))
 	}
 
-	line := name
+	line := titleStyle.Render(name)
 	used := 0
 	for i, pair := range pairs {
 		candidate := line + "  " + pair
@@ -567,21 +601,23 @@ func patchLines(block atuin.Content, width int) []string {
 
 	var lines []string
 	for _, file := range block.Files {
-		head := file.Path
+		head := pathStyle.Render(file.Path)
 		if file.Change != "" {
 			head += "  " + file.Change
 		}
 		if file.Additions > 0 || file.Deletions > 0 {
-			head += fmt.Sprintf("  +%d -%d", file.Additions, file.Deletions)
+			head = headSuffix(head, countsSuffix(file.Additions, file.Deletions), width)
+		} else {
+			head = truncate(head, width)
 		}
-		lines = append(lines, truncate(head, width))
+		lines = append(lines, head)
 
 		diff := strings.TrimSpace(file.Diff)
 		if diff == "" {
 			continue
 		}
 		for _, part := range preserve(diff, width-2) {
-			lines = append(lines, "  "+part)
+			lines = append(lines, "  "+styleDiffLine(part, mutedStyle.Render))
 			if len(lines) > maxBlockLines {
 				break
 			}
@@ -591,6 +627,20 @@ func patchLines(block atuin.Content, width int) []string {
 		}
 	}
 	return capped(lines)
+}
+
+func styleDiffLine(line string, header func(...string) string) string {
+	switch {
+	case strings.HasPrefix(line, "@@"):
+		return hunkStyle.Render(line)
+	case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+		return styled(header, line)
+	case strings.HasPrefix(line, "+"):
+		return additionStyle.Render(line)
+	case strings.HasPrefix(line, "-"):
+		return deletionStyle.Render(line)
+	}
+	return line
 }
 
 func secondMeta(msg atuin.Message, hidden typeMask) string {
@@ -700,6 +750,9 @@ func onlyBlank(lines []string) bool {
 }
 
 func styleAll(lines []string, style func(...string) string) []string {
+	if style == nil {
+		return lines
+	}
 	out := make([]string, len(lines))
 	for i, line := range lines {
 		out[i] = style(line)
