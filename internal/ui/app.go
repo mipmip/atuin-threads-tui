@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -34,6 +35,11 @@ type searchMsg struct {
 	query   string
 	threads []atuin.Thread
 	err     error
+}
+
+type copiedMsg struct {
+	count    int
+	terminal bool
 }
 
 type detailRenderedMsg struct {
@@ -171,6 +177,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail = msg.rendering
 		m.scrollToAnchor(msg.anchor)
 		m.clampScroll()
+		return m, nil
+
+	case copiedMsg:
+		if msg.terminal {
+			m.notice = fmt.Sprintf("copied %d messages (terminal)", msg.count)
+			return m, nil
+		}
+		m.notice = fmt.Sprintf("copied %d messages", msg.count)
 		return m, nil
 
 	case searchMsg:

@@ -289,7 +289,8 @@ func TestCopyUsesTheNativeTool(t *testing.T) {
 		return nil
 	}
 
-	m, _ = pressRune(t, m, 'y')
+	m, cmd := pressRune(t, m, 'y')
+	m = feedCopy(t, m, cmd)
 	if !strings.Contains(copied, "Please bootstrap this repository.") {
 		t.Fatalf("payload = %q", copied)
 	}
@@ -305,18 +306,48 @@ func TestCopyFallsBackToTheTerminal(t *testing.T) {
 	m.lookPath = func(string) (string, error) { return "", errors.New("missing") }
 	m.clipboard = func(text string) string {
 		sequence = text
-		return "\x1b]52;c;x\x07"
+		return ""
 	}
 
 	m, cmd := pressRune(t, m, 'y')
+	m = feedCopy(t, m, cmd)
 	if sequence == "" {
 		t.Fatal("the terminal clipboard was not called")
 	}
 	if m.notice != "copied 1 messages (terminal)" {
 		t.Fatalf("notice = %q", m.notice)
 	}
+}
+
+func feedCopy(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
 	if cmd == nil {
-		t.Fatal("no command writes the sequence")
+		t.Fatal("no copy command")
+	}
+	next, _ := m.Update(cmd())
+	return next.(Model)
+}
+
+func TestCopyDoesNotBlockOnADaemonisingTool(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "att-fake-clip")
+	body := "#!/bin/sh\nsleep 5 &\nexit 0\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runClipboard(clipboardTool{name: "att-fake-clip"}, "hello")
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the clipboard call waited for a background child holding stderr")
 	}
 }
 

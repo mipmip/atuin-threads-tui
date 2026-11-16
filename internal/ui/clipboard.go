@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"bytes"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -41,10 +41,17 @@ func runClipboard(tool clipboardTool, text string) error {
 	}
 	cmd := exec.Command(path, tool.args...)
 	cmd.Stdin = strings.NewReader(text)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	cmd.Stdout = nil
+	out, err := os.CreateTemp("", "att-clipboard-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(out.Name())
+	defer out.Close()
+	cmd.Stderr = out
 	if err := cmd.Run(); err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+		data, _ := os.ReadFile(out.Name())
+		if msg := strings.TrimSpace(string(data)); msg != "" {
 			return errors.New(msg)
 		}
 		return err

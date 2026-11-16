@@ -173,20 +173,20 @@ func (m Model) copySelection() (tea.Model, tea.Cmd) {
 	if run == nil {
 		run = runClipboard
 	}
-
-	if tool, ok := detectClipboard(lookPath); ok {
-		if err := run(tool, payload); err == nil {
-			m.notice = fmt.Sprintf("copied %d messages", count)
-			return m, nil
-		}
-	}
-
 	sequence := m.clipboard
 	if sequence == nil {
 		sequence = ansi.SetSystemClipboard
 	}
-	m.notice = fmt.Sprintf("copied %d messages (terminal)", count)
-	return m, writeStdout(sequence(payload))
+
+	return m, func() tea.Msg {
+		if tool, ok := detectClipboard(lookPath); ok {
+			if err := run(tool, payload); err == nil {
+				return copiedMsg{count: count}
+			}
+		}
+		writeStdout(sequence(payload))
+		return copiedMsg{count: count, terminal: true}
+	}
 }
 
 func (m Model) writeSelection() (tea.Model, tea.Cmd) {
@@ -245,9 +245,6 @@ func (m Model) writeExportFile(payload string, first, last int) (tea.Model, tea.
 	return m, nil
 }
 
-func writeStdout(sequence string) tea.Cmd {
-	return func() tea.Msg {
-		fmt.Fprint(os.Stdout, sequence)
-		return nil
-	}
+func writeStdout(sequence string) {
+	fmt.Fprint(os.Stdout, sequence)
 }
