@@ -257,7 +257,7 @@ func (m *Model) clampCursor() {
 		m.cursor = len(threads) - 1
 	}
 
-	height := m.bodyHeight()
+	height := m.listHeight()
 	if height <= 0 {
 		return
 	}
@@ -293,4 +293,11 @@ func (m Model) bodyHeight() int {
 		return 0
 	}
 	return m.height - 3
+}
+
+func (m Model) listHeight() int {
+	if height := m.bodyHeight() - 2; height > 0 {
+		return height
+	}
+	return 0
 }

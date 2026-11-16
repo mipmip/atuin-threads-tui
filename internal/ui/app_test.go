@@ -10,13 +10,14 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/mipmip/atuin-threads-tui/internal/atuin"
 )
 
-var ansi = regexp.MustCompile("\x1b\\[[0-9;]*m")
+var sgr = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
-func plain(s string) string { return ansi.ReplaceAllString(s, "") }
+func plain(s string) string { return sgr.ReplaceAllString(s, "") }
 
 type fakeSource struct {
 	threads       []atuin.Thread
@@ -340,16 +341,15 @@ func TestQuitKeys(t *testing.T) {
 }
 
 func TestThreadRowFitsWidth(t *testing.T) {
-	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	thread := sampleThreads()[0]
 
 	for _, width := range []int{10, 40, 120} {
-		row := plain(threadRow(width, thread, true, now))
-		if got := len([]rune(row)); got > width {
+		row := plain(newListLayout(width, 969).row(thread, true))
+		if got := lipgloss.Width(row); got > width {
 			t.Errorf("row width = %d, want <= %d: %q", got, width, row)
 		}
 	}
-	if !strings.HasPrefix(plain(threadRow(80, thread, true, now)), "> ") {
+	if !strings.HasPrefix(plain(newListLayout(80, 969).row(thread, true)), "> ") {
 		t.Error("selected row has no marker")
 	}
 }

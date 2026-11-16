@@ -15,6 +15,7 @@
           pname = "att";
           version = "0.1.0";
           src = pkgs.lib.cleanSource ./.;
+          subPackages = [ "cmd/att" ];
           vendorHash = null;
           meta.mainProgram = "att";
         };

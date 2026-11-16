@@ -2,16 +2,29 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mipmip/atuin-threads-tui/internal/atuin"
 )
 
 const maxBlockLines = 8
+
+const (
+	markerWidth = 2
+	listGutter  = 2
+	idWidth     = 8
+	dateWidth   = 12
+	agentWidth  = 2
+	msgsWidth   = 4
+	dirWidth    = 18
+	minTitle    = 20
+)
 
 var (
 	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
@@ -33,9 +46,14 @@ func (m Model) View() string {
 
 	body := m.body()
 	if height := m.bodyHeight(); height > 0 {
-		if lines := strings.Count(body, "\n") + 1; lines < height {
-			body += strings.Repeat("\n", height-lines)
+		lines := strings.Split(body, "\n")
+		if len(lines) > height {
+			lines = lines[:height]
 		}
+		for len(lines) < height {
+			lines = append(lines, "")
+		}
+		body = strings.Join(lines, "\n")
 	}
 	b.WriteString(body)
 	b.WriteString("\n")
@@ -67,18 +85,22 @@ func (m Model) body() string {
 		return mutedStyle.Render("no thread matches the filter")
 	}
 
-	height := m.bodyHeight()
+	layout := newListLayout(m.width, widestMessages(threads))
+	lines := []string{mutedStyle.Render(layout.header())}
+	if m.bodyHeight() >= 2 {
+		lines = append(lines, mutedStyle.Render(layout.rule()))
+	}
+
+	height := m.listHeight()
 	end := m.offset + height
 	if end > len(threads) {
 		end = len(threads)
 	}
 
-	rows := make([]string, 0, height)
-	now := m.now()
 	for i := m.offset; i < end; i++ {
-		rows = append(rows, threadRow(m.width, threads[i], i == m.cursor, now))
+		lines = append(lines, layout.row(threads[i], i == m.cursor))
 	}
-	return strings.Join(rows, "\n")
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) detailBody() string {
@@ -142,27 +164,187 @@ func (m Model) hints() string {
 	}
 }
 
-func threadRow(width int, t atuin.Thread, selected bool, now time.Time) string {
+type listLayout struct {
+	width int
+	id    int
+	date  int
+	agent int
+	title int
+	msgs  int
+	dir   int
+}
+
+func newListLayout(width, widest int) listLayout {
+	l := listLayout{
+		width: width,
+		id:    idWidth,
+		date:  dateWidth,
+		agent: agentWidth,
+		msgs:  max(msgsWidth, len(strconv.Itoa(widest))),
+		dir:   dirWidth,
+	}
+	if width < 100 {
+		l.dir = 0
+	}
+	for _, column := range []*int{&l.dir, &l.date, &l.agent, &l.msgs} {
+		l.title = max(1, width-l.fixed())
+		if l.title >= minTitle {
+			break
+		}
+		*column = 0
+	}
+	l.title = max(1, width-l.fixed())
+	return l
+}
+
+func (l listLayout) fixed() int {
+	width := markerWidth + l.id + listGutter
+	for _, column := range []int{l.date, l.agent, l.msgs, l.dir} {
+		if column > 0 {
+			width += listGutter + column
+		}
+	}
+	return width
+}
+
+func (l listLayout) header() string {
+	return l.line("  ", "id", "date", "ag", "title", "msgs", "dir")
+}
+
+func (l listLayout) rule() string {
+	rule := func(n int) string { return strings.Repeat("─", n) }
+	return l.line("  ", rule(l.id), rule(l.date), rule(l.agent), rule(l.title), rule(l.msgs), rule(l.dir))
+}
+
+func (l listLayout) row(t atuin.Thread, selected bool) string {
 	marker := "  "
 	if selected {
 		marker = "> "
 	}
 
-	title := strings.TrimSpace(t.Title)
-	if title == "" {
-		title = "(untitled)"
-	}
-
-	line := fmt.Sprintf(
-		"%s%s  %s  ·  %s  ·  %d msgs  ·  %s",
-		marker, shortID(t.AtuinID), title, t.Harness, t.MessageCount, age(now, t.UpdatedAt),
+	line := l.line(
+		marker,
+		shortID(t.AtuinID),
+		dateLabel(t),
+		agentTag(t.Harness),
+		titleLabel(t),
+		strconv.Itoa(t.MessageCount),
+		tailTruncate(dirLabel(t.CWD), l.dir),
 	)
-	line = truncate(line, width)
-
 	if selected {
 		return selectedStyle.Render(line)
 	}
 	return line
+}
+
+func (l listLayout) line(marker, id, date, agent, title, msgs, dir string) string {
+	var b strings.Builder
+	b.WriteString(marker)
+	b.WriteString(padRight(id, l.id))
+	if l.date > 0 {
+		b.WriteString(strings.Repeat(" ", listGutter))
+		b.WriteString(padRight(date, l.date))
+	}
+	if l.agent > 0 {
+		b.WriteString(strings.Repeat(" ", listGutter))
+		b.WriteString(padRight(agent, l.agent))
+	}
+	b.WriteString(strings.Repeat(" ", listGutter))
+	b.WriteString(padRight(title, l.title))
+	if l.msgs > 0 {
+		b.WriteString(strings.Repeat(" ", listGutter))
+		b.WriteString(padLeft(msgs, l.msgs))
+	}
+	if l.dir > 0 {
+		b.WriteString(strings.Repeat(" ", listGutter))
+		b.WriteString(padRight(dir, l.dir))
+	}
+	return ansi.Truncate(b.String(), l.width, "")
+}
+
+func widestMessages(threads []atuin.Thread) int {
+	widest := 0
+	for _, t := range threads {
+		if t.MessageCount > widest {
+			widest = t.MessageCount
+		}
+	}
+	return widest
+}
+
+func dateLabel(t atuin.Thread) string {
+	updated := t.UpdatedAt
+	if updated.IsZero() {
+		return "-"
+	}
+	return updated.Local().Format("02 Jan 15:04")
+}
+
+func agentTag(harness string) string {
+	name := strings.ToLower(strings.TrimSpace(harness))
+	switch name {
+	case "":
+		return "--"
+	case "opencode":
+		return "oc"
+	case "claude-code":
+		return "cc"
+	}
+	runes := []rune(name)
+	if len(runes) <= 2 {
+		return name
+	}
+	return string(runes[:2])
+}
+
+func titleLabel(t atuin.Thread) string {
+	title := strings.TrimSpace(t.Title)
+	if title == "" {
+		return "(untitled)"
+	}
+	return title
+}
+
+func dirLabel(cwd string) string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return "-"
+	}
+	cwd = strings.TrimRight(cwd, "/")
+	if cwd == "" {
+		return "/"
+	}
+	return cwd[strings.LastIndex(cwd, "/")+1:]
+}
+
+func padRight(s string, width int) string {
+	s = ansi.Truncate(s, width, "…")
+	if pad := width - ansi.StringWidth(s); pad > 0 {
+		s += strings.Repeat(" ", pad)
+	}
+	return s
+}
+
+func padLeft(s string, width int) string {
+	s = ansi.Truncate(s, width, "…")
+	if pad := width - ansi.StringWidth(s); pad > 0 {
+		s = strings.Repeat(" ", pad) + s
+	}
+	return s
+}
+
+func tailTruncate(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	w := ansi.StringWidth(s)
+	if w <= width {
+		return s
+	}
+	if width == 1 {
+		return "…"
+	}
+	return ansi.TruncateLeft(s, w-width+1, "…")
 }
 
 func (m Model) detailLines() []string {
@@ -345,14 +527,10 @@ func truncate(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	runes := []rune(s)
-	if len(runes) <= width {
+	if ansi.StringWidth(s) <= width {
 		return s
 	}
-	if width == 1 {
-		return "…"
-	}
-	return string(runes[:width-1]) + "…"
+	return ansi.Truncate(s, width, "…")
 }
 
 func shortID(id string) string {
