@@ -7,6 +7,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Press `v` in a conversation to select a range of messages, `y` to copy it as Markdown, `w` to write it to a file, and `e` to export the whole thread.
 
 - A message type panel, opened with `t` in a conversation, hides prompts,
   replies, thinking, tool calls, tool results, patches, summaries, or notes and

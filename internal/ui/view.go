@@ -78,7 +78,7 @@ func (m Model) View() string {
 }
 
 func (m Model) body() string {
-	if m.mode == modeDetail {
+	if m.mode == modeDetail || m.mode == modeSelect {
 		return m.detailBody()
 	}
 	if m.mode == modeTypes {
@@ -126,6 +126,9 @@ func (m Model) detailBody() string {
 	lines := m.detail.slice(m.detailScroll, m.bodyHeight())
 	if len(lines) == 0 {
 		return ""
+	}
+	if m.mode == modeSelect {
+		lines = m.markSelection(lines)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -188,6 +191,21 @@ func (m Model) status() string {
 			counts = fmt.Sprintf("%d of %d threads", len(m.visible()), len(m.threads))
 		}
 		return mutedStyle.Render("filter: ") + m.filterInput + "▌" + mutedStyle.Render("  "+counts)
+	case modeSelect:
+		if _, _, ok := m.selectedRange(); !ok {
+			return mutedStyle.Render(shortID(m.conversation.Session.AtuinID) + " · nothing selected")
+		}
+		if m.notice != "" {
+			return mutedStyle.Render(m.notice)
+		}
+		return mutedStyle.Render(fmt.Sprintf(
+			"%s · %d selected of %s · line %d of %d",
+			shortID(m.conversation.Session.AtuinID),
+			m.selectedCount(),
+			m.messageCountLabel(),
+			m.detailScroll+1,
+			m.detail.total,
+		))
 	case modeDetail, modeTypes:
 		if m.rendering || !m.detail.built {
 			return mutedStyle.Render(fmt.Sprintf(
@@ -227,9 +245,11 @@ func (m Model) status() string {
 func (m Model) hints() string {
 	switch m.mode {
 	case modeDetail:
-		return mutedStyle.Render("j/k scroll · pgup/pgdn page · g/G top/bottom · t types · esc back · q quit")
+		return mutedStyle.Render("j/k scroll · space page · t types · v select · e export · esc back · q quit")
 	case modeTypes:
 		return mutedStyle.Render("space toggle · a all · n conversation · 1-4 preset · enter apply · esc cancel")
+	case modeSelect:
+		return mutedStyle.Render("j/k message · J/K ten · y copy · w file · e thread · esc back")
 	case modeFilter:
 		return mutedStyle.Render("type to filter · enter apply · ctrl+u reset · esc clear")
 	default:

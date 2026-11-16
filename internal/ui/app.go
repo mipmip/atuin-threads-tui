@@ -17,6 +17,7 @@ const (
 	modeDetail
 	modeFilter
 	modeTypes
+	modeSelect
 )
 
 type threadsMsg struct {
@@ -60,6 +61,17 @@ type Model struct {
 	typesDraft  typeMask
 	typesCursor int
 	typesCounts map[typeMask]int
+
+	selectAnchor int
+	selectCursor int
+	selection    []int
+	notice       string
+
+	lookPath  detector
+	copyText  func(clipboardTool, string) error
+	clipboard func(string) string
+	writeFile func(string, string, string) (string, error)
+	exportDir string
 
 	filter      string
 	filterInput string
@@ -204,6 +216,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDetailKey(key)
 	case modeTypes:
 		return m.handleTypesKey(key)
+	case modeSelect:
+		return m.handleSelectKey(key)
 	case modeFilter:
 		return m.handleFilterKey(key, msg)
 	}
@@ -279,6 +293,16 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		m.detailScroll = 0
 	case "G", "end":
 		m.detailScroll = m.detailTotal()
+	case "v":
+		if !m.detail.built {
+			return m, nil
+		}
+		return m.startSelection(), nil
+	case "e":
+		if !m.detail.built {
+			return m, nil
+		}
+		return m.exportThread()
 	case "t":
 		if !m.detail.built {
 			return m, nil

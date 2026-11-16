@@ -51,6 +51,7 @@ type messageView struct {
 type detailBlock struct {
 	start int
 	msg   int
+	run   bool
 	lines []string
 }
 
@@ -67,12 +68,62 @@ type detailRendering struct {
 }
 
 func (r detailRendering) add(msg int, lines []string) detailRendering {
+	return r.addBlock(msg, false, lines)
+}
+
+// addRun adds the block of a collapsed run of empty messages, which carries the
+// index of the first message in the run but cannot be selected on its own.
+func (r detailRendering) addRun(msg int, lines []string) detailRendering {
+	return r.addBlock(msg, true, lines)
+}
+
+func (r detailRendering) addBlock(msg int, run bool, lines []string) detailRendering {
 	if len(lines) == 0 {
 		return r
 	}
-	r.blocks = append(r.blocks, detailBlock{start: r.total, msg: msg, lines: lines})
+	r.blocks = append(r.blocks, detailBlock{start: r.total, msg: msg, run: run, lines: lines})
 	r.total += len(lines)
 	return r
+}
+
+// selectable returns the message indices that can be selected, in the order
+// they appear. Collapsed runs of empty messages are not among them.
+func (r detailRendering) selectable() []int {
+	out := make([]int, 0, len(r.blocks))
+	for _, block := range r.blocks {
+		if !block.run {
+			out = append(out, block.msg)
+		}
+	}
+	return out
+}
+
+// lineInfo reports which message draws a rendered line and whether that line is
+// the first one of its message.
+func (r detailRendering) lineInfo(line int) (msg int, first bool) {
+	if !r.built || line < 0 || line >= r.total {
+		return -1, false
+	}
+	found := sort.Search(len(r.blocks), func(i int) bool {
+		return r.blocks[i].start+len(r.blocks[i].lines) > line
+	})
+	if found >= len(r.blocks) || r.blocks[found].start > line {
+		return -1, false
+	}
+	block := r.blocks[found]
+	return block.msg, block.start == line
+}
+
+// messageSpan returns the first and the last line of a message block.
+func (r detailRendering) messageSpan(msg int) (start, end int, ok bool) {
+	found := sort.Search(len(r.blocks), func(i int) bool {
+		return r.blocks[i].msg >= msg
+	})
+	if found >= len(r.blocks) || r.blocks[found].msg != msg || r.blocks[found].run {
+		return 0, 0, false
+	}
+	block := r.blocks[found]
+	return block.start, block.start + len(block.lines) - 1, true
 }
 
 // messageAt returns the index of the message at a rendered line, or -1 when
@@ -218,7 +269,7 @@ func (m Model) buildDetail() detailRendering {
 			}
 			if end-i >= 2 {
 				lines := append(layout.rows(collapsedView(m.conversation.Messages[i:end], views[i])), "")
-				r = r.add(i, lines)
+				r = r.addRun(i, lines)
 				i = end
 				continue
 			}
