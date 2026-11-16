@@ -6,6 +6,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A one cell scrollbar in the right margin of the conversation view shows how
+  long the thread is and where the visible lines sit.
+
 ### Changed
 
 - The conversation view renders a thread once and scrolls from that cache, so

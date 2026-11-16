@@ -55,6 +55,9 @@ func (m Model) View() string {
 		for len(lines) < height {
 			lines = append(lines, "")
 		}
+		if m.mode == modeDetail {
+			lines = m.withScrollbar(lines)
+		}
 		body = strings.Join(lines, "\n")
 	}
 	b.WriteString(body)
