@@ -735,23 +735,33 @@ func preserve(text string, width int) []string {
 
 func wrapPreserving(line string, width int) []string {
 	var out []string
-	first := true
-	for remaining := line; remaining != ""; {
+	for rest := line; rest != ""; {
 		limit := width
 		prefix := ""
-		if !first {
+		if len(out) > 0 {
 			prefix = "  "
 			limit = width - 2
 		}
-		if limit < 1 {
-			limit = 1
-		}
-		chunks := splitWidth(remaining, limit)
-		out = append(out, prefix+chunks[0])
-		remaining = strings.TrimPrefix(remaining, chunks[0])
-		first = false
+		head, next := cutWidth(rest, limit)
+		out = append(out, prefix+head)
+		rest = next
 	}
 	return out
+}
+
+func cutWidth(s string, width int) (string, string) {
+	if width < 1 {
+		width = 1
+	}
+	used := 0
+	for i, r := range s {
+		size := runewidth.RuneWidth(r)
+		if used > 0 && used+size > width {
+			return s[:i], s[i:]
+		}
+		used += size
+	}
+	return s, ""
 }
 
 func placeholderThinking(text string) bool {
@@ -798,25 +808,12 @@ func splitWidth(s string, width int) []string {
 	if width < 1 {
 		width = 1
 	}
-	if ansi.StringWidth(s) <= width {
-		return []string{s}
-	}
 
 	var out []string
-	var current strings.Builder
-	used := 0
-	for _, r := range s {
-		size := runewidth.RuneWidth(r)
-		if used+size > width && used > 0 {
-			out = append(out, current.String())
-			current.Reset()
-			used = 0
-		}
-		current.WriteRune(r)
-		used += size
-	}
-	if current.Len() > 0 {
-		out = append(out, current.String())
+	for rest := s; rest != ""; {
+		head, next := cutWidth(rest, width)
+		out = append(out, head)
+		rest = next
 	}
 	return out
 }

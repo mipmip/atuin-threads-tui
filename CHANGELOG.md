@@ -23,6 +23,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Several keys that arrive in one input batch now each count, so a fast scroll
   is no longer swallowed.
+- Opening a thread with very long tool output is fast again: each line is cut in
+  one pass instead of being rescanned and copied once per chunk.
 
 
 ### Added
