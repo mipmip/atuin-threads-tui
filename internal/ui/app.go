@@ -16,6 +16,7 @@ const (
 	modeList mode = iota
 	modeDetail
 	modeFilter
+	modeTypes
 )
 
 type threadsMsg struct {
@@ -36,6 +37,7 @@ type searchMsg struct {
 
 type detailRenderedMsg struct {
 	rendering detailRendering
+	anchor    int
 }
 
 // Model is the bubbletea model for the browser.
@@ -53,6 +55,11 @@ type Model struct {
 	detail       detailRendering
 	rendering    bool
 	builds       int
+	hidden       typeMask
+
+	typesDraft  typeMask
+	typesCursor int
+	typesCounts map[typeMask]int
 
 	filter      string
 	filterInput string
@@ -145,11 +152,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.startDetail()
 
 	case detailRenderedMsg:
-		if m.mode != modeDetail || msg.rendering.width != m.width {
+		if m.mode != modeDetail || msg.rendering.width != m.width || msg.rendering.hidden != m.hidden {
 			return m, nil
 		}
 		m.rendering = false
 		m.detail = msg.rendering
+		m.scrollToAnchor(msg.anchor)
 		m.clampScroll()
 		return m, nil
 
@@ -194,6 +202,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case modeDetail:
 		return m.handleDetailKey(key)
+	case modeTypes:
+		return m.handleTypesKey(key)
 	case modeFilter:
 		return m.handleFilterKey(key, msg)
 	}
@@ -269,9 +279,56 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		m.detailScroll = 0
 	case "G", "end":
 		m.detailScroll = m.detailTotal()
+	case "t":
+		if !m.detail.built {
+			return m, nil
+		}
+		m.mode = modeTypes
+		m.typesDraft = m.hidden
+		m.typesCursor = 0
+		m.typesCounts = countTypes(m.conversation)
+		return m, nil
 	}
 
 	m.clampScroll()
+	return m, nil
+}
+
+func (m Model) handleTypesKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc", "q", "t":
+		m.mode = modeDetail
+		return m, nil
+	case "enter":
+		m.hidden = m.typesDraft
+		m.mode = modeDetail
+		return m.startDetail()
+	case "j", "down":
+		m.typesCursor++
+	case "k", "up":
+		m.typesCursor--
+	case "g", "home":
+		m.typesCursor = 0
+	case "G", "end":
+		m.typesCursor = len(typeRows) - 1
+	case " ":
+		m.typesDraft = m.typesDraft.toggle(typeRows[m.typesCursor].category)
+	case "a", "1":
+		m.typesDraft = 0
+	case "n", "2":
+		m.typesDraft = allTypes &^ conversationTypes
+	case "3":
+		m.typesDraft = allTypes &^ toolTypes
+	case "4":
+		m.typesDraft = allTypes &^ promptTypes
+	}
+
+	if m.typesCursor < 0 {
+		m.typesCursor = 0
+	}
+	if m.typesCursor >= len(typeRows) {
+		m.typesCursor = len(typeRows) - 1
+	}
 	return m, nil
 }
 
@@ -330,29 +387,38 @@ func (m Model) detailTotal() int {
 // startDetail renders the open conversation, in the background when it is too
 // large to do without blocking the interface.
 func (m Model) startDetail() (tea.Model, tea.Cmd) {
+	anchor := m.detail.messageAt(m.detailScroll)
 	m.builds++
 	m.detail = detailRendering{}
 	m.rendering = false
 
 	if len(m.conversation.Messages) <= detailSyncMessages {
 		m.detail = m.buildDetail()
+		m.scrollToAnchor(anchor)
 		m.clampScroll()
 		return m, nil
 	}
 
 	m.rendering = true
-	return m, m.renderDetail()
+	return m, m.renderDetail(anchor)
 }
 
-func (m Model) renderDetail() tea.Cmd {
+func (m *Model) scrollToAnchor(anchor int) {
+	if anchor > 0 && m.detail.built {
+		m.detailScroll = m.detail.scrollToMessage(anchor)
+	}
+}
+
+func (m Model) renderDetail(anchor int) tea.Cmd {
 	model := Model{
 		mode:         modeDetail,
 		width:        m.width,
+		hidden:       m.hidden,
 		conversation: m.conversation,
 		now:          m.now,
 	}
 	return func() tea.Msg {
-		return detailRenderedMsg{rendering: model.buildDetail()}
+		return detailRenderedMsg{rendering: model.buildDetail(), anchor: anchor}
 	}
 }
 

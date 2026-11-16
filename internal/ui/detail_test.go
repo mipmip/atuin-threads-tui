@@ -271,7 +271,7 @@ func TestMessageMeta(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := secondMeta(tc.msg); got != tc.want {
+			if got := secondMeta(tc.msg, 0); got != tc.want {
 				t.Errorf("secondMeta = %q, want %q", got, tc.want)
 			}
 		})

@@ -8,6 +8,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A message type panel, opened with `t` in a conversation, hides prompts,
+  replies, thinking, tool calls, tool results, patches, summaries, or notes and
+  keeps the selection for the rest of the session.
 - A one cell scrollbar in the right margin of the conversation view shows how
   long the thread is and where the visible lines sit.
 

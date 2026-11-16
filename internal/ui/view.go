@@ -73,6 +73,9 @@ func (m Model) body() string {
 	if m.mode == modeDetail {
 		return m.detailBody()
 	}
+	if m.mode == modeTypes {
+		return m.typesBody()
+	}
 
 	switch {
 	case m.loading:
@@ -119,6 +122,52 @@ func (m Model) detailBody() string {
 	return strings.Join(lines, "\n")
 }
 
+func (m Model) messageTotal() int {
+	if count := m.conversation.Session.MessageCount; count > 0 {
+		return count
+	}
+	return len(m.conversation.Messages)
+}
+
+func (m Model) messageCountLabel() string {
+	if m.hidden == 0 {
+		return fmt.Sprintf("%d msgs", m.messageTotal())
+	}
+	return fmt.Sprintf("%d of %d msgs", m.detail.messages, m.messageTotal())
+}
+
+func (m Model) typesBody() string {
+	label := "show message types"
+	count := m.messageCountLabel()
+	gap := m.width - 2 - len(label) - len(count)
+	if gap < 1 {
+		gap = 1
+	}
+
+	lines := make([]string, 0, len(typeRows)+2)
+	lines = append(lines, " "+titleStyle.Render(label)+strings.Repeat(" ", gap)+mutedStyle.Render(count))
+	lines = append(lines, "")
+
+	for i, row := range typeRows {
+		marker := "  "
+		if i == m.typesCursor {
+			marker = "> "
+		}
+		box := "[ ] "
+		if m.typesDraft.shows(row.category) {
+			box = "[x] "
+		}
+		name := padRight(row.label, 12)
+		if i == m.typesCursor {
+			name = selectedStyle.Render(name)
+		}
+		lines = append(lines, " "+marker+box+name+
+			padLeft(strconv.Itoa(m.typesCounts[row.category]), 5)+
+			"   "+mutedStyle.Render(row.note))
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (m Model) status() string {
 	if m.err != nil {
 		return errorStyle.Render("error: " + m.err.Error())
@@ -131,7 +180,7 @@ func (m Model) status() string {
 			counts = fmt.Sprintf("%d of %d threads", len(m.visible()), len(m.threads))
 		}
 		return mutedStyle.Render("filter: ") + m.filterInput + "▌" + mutedStyle.Render("  "+counts)
-	case modeDetail:
+	case modeDetail, modeTypes:
 		if m.rendering || !m.detail.built {
 			return mutedStyle.Render(fmt.Sprintf(
 				"%s · %d messages · rendering",
@@ -139,10 +188,14 @@ func (m Model) status() string {
 				len(m.conversation.Messages),
 			))
 		}
+		count := m.messageCountLabel()
+		if m.mode == modeTypes {
+			return mutedStyle.Render(shortID(m.conversation.Session.AtuinID) + " · " + count)
+		}
 		return mutedStyle.Render(fmt.Sprintf(
-			"%s · %d messages · line %d of %d",
+			"%s · %s · line %d of %d",
 			shortID(m.conversation.Session.AtuinID),
-			len(m.conversation.Messages),
+			count,
 			m.detailScroll+1,
 			m.detail.total,
 		))
@@ -166,7 +219,9 @@ func (m Model) status() string {
 func (m Model) hints() string {
 	switch m.mode {
 	case modeDetail:
-		return mutedStyle.Render("j/k scroll · pgup/pgdn page · g/G top/bottom · esc back · q quit")
+		return mutedStyle.Render("j/k scroll · pgup/pgdn page · g/G top/bottom · t types · esc back · q quit")
+	case modeTypes:
+		return mutedStyle.Render("space toggle · a all · n conversation · 1-4 preset · enter apply · esc cancel")
 	case modeFilter:
 		return mutedStyle.Render("type to filter · enter apply · ctrl+u reset · esc clear")
 	default:

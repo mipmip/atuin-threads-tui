@@ -50,25 +50,56 @@ type messageView struct {
 // detailBlock is one message, or one collapsed run, and the lines it occupies.
 type detailBlock struct {
 	start int
+	msg   int
 	lines []string
 }
 
-// detailRendering is a conversation rendered for one terminal width.
+// detailRendering is a conversation rendered for one terminal width and one
+// message type selection.
 type detailRendering struct {
-	width  int
-	built  bool
-	head   []string
-	blocks []detailBlock
-	total  int
+	width    int
+	hidden   typeMask
+	built    bool
+	head     []string
+	blocks   []detailBlock
+	total    int
+	messages int
 }
 
-func (r detailRendering) add(lines []string) detailRendering {
+func (r detailRendering) add(msg int, lines []string) detailRendering {
 	if len(lines) == 0 {
 		return r
 	}
-	r.blocks = append(r.blocks, detailBlock{start: r.total, lines: lines})
+	r.blocks = append(r.blocks, detailBlock{start: r.total, msg: msg, lines: lines})
 	r.total += len(lines)
 	return r
+}
+
+// messageAt returns the index of the message at a rendered line, or -1 when
+// that line belongs to the thread header.
+func (r detailRendering) messageAt(line int) int {
+	if !r.built || line < 0 || line >= r.total {
+		return -1
+	}
+	found := sort.Search(len(r.blocks), func(i int) bool {
+		return r.blocks[i].start+len(r.blocks[i].lines) > line
+	})
+	if found >= len(r.blocks) || r.blocks[found].start > line {
+		return -1
+	}
+	return r.blocks[found].msg
+}
+
+// scrollToMessage returns the line of the first block that starts at the given
+// message or at a later one.
+func (r detailRendering) scrollToMessage(msg int) int {
+	found := sort.Search(len(r.blocks), func(i int) bool {
+		return r.blocks[i].msg >= msg
+	})
+	if found >= len(r.blocks) {
+		return 0
+	}
+	return r.blocks[found].start
 }
 
 // slice returns the lines between from and from+count, reading only the blocks
@@ -134,7 +165,7 @@ func (m Model) buildDetail() detailRendering {
 		now = time.Now
 	}
 
-	r := detailRendering{width: m.width, built: true}
+	r := detailRendering{width: m.width, hidden: m.hidden, built: true}
 
 	title := strings.TrimSpace(session.Title)
 	if title == "" {
@@ -169,24 +200,41 @@ func (m Model) buildDetail() detailRendering {
 
 	views := make([]messageView, len(m.conversation.Messages))
 	for i, msg := range m.conversation.Messages {
-		views[i] = newMessageView(msg, layout.prose, layout.body)
+		views[i] = newMessageView(msg, layout.prose, layout.body, m.hidden)
 	}
 
-	for i := 0; i < len(views); {
-		if len(m.conversation.Messages[i].Content) == 0 {
+	for i := 0; i < len(m.conversation.Messages); {
+		msg := m.conversation.Messages[i]
+		if len(msg.Content) == 0 {
+			if !m.hidden.shows(typeNotes) {
+				for i < len(m.conversation.Messages) && len(m.conversation.Messages[i].Content) == 0 {
+					i++
+				}
+				continue
+			}
 			end := i + 1
 			for end < len(views) && len(m.conversation.Messages[end].Content) == 0 {
 				end++
 			}
 			if end-i >= 2 {
 				lines := append(layout.rows(collapsedView(m.conversation.Messages[i:end], views[i])), "")
-				r = r.add(lines)
+				r = r.add(i, lines)
 				i = end
 				continue
 			}
 		}
-		r = r.add(append(layout.rows(views[i]), ""))
+		if len(msg.Content) > 0 && !hasVisibleBlock(msg, m.hidden) {
+			i++
+			continue
+		}
+		r.messages++
+		r = r.add(i, append(layout.rows(views[i]), ""))
 		i++
+	}
+
+	if r.messages == 0 && len(m.conversation.Messages) > 0 {
+		r.head = append(r.head, mutedStyle.Render(" no messages of the selected types"))
+		r.total = len(r.head)
 	}
 
 	return r
@@ -228,8 +276,8 @@ func (l detailLayout) rows(view messageView) []string {
 	return out
 }
 
-func newMessageView(msg atuin.Message, prose, code int) messageView {
-	body := messageBody(msg, prose, code)
+func newMessageView(msg atuin.Message, prose, code int, hidden typeMask) messageView {
+	body := messageBody(msg, prose, code, hidden)
 	if onlyBlank(body) {
 		body = nil
 	}
@@ -239,7 +287,7 @@ func newMessageView(msg atuin.Message, prose, code int) messageView {
 		meta: [2]string{
 			mutedStyle.Render(clock(msg.Timestamp)+" - ") +
 				authorStyle(msg.Role).Render(authorLabel(msg.Role)),
-			mutedStyle.Render(secondMeta(msg)),
+			mutedStyle.Render(secondMeta(msg, hidden)),
 		},
 	}
 }
@@ -262,9 +310,9 @@ func collapsedView(messages []atuin.Message, first messageView) messageView {
 	}
 }
 
-func messageBody(msg atuin.Message, prose, code int) []string {
+func messageBody(msg atuin.Message, prose, code int, hidden typeMask) []string {
 	var out []string
-	for _, block := range msg.Content {
+	for _, block := range visibleBlocks(msg, hidden) {
 		out = append(out, blockLines(block, prose, code)...)
 	}
 	return out
@@ -545,8 +593,8 @@ func patchLines(block atuin.Content, width int) []string {
 	return capped(lines)
 }
 
-func secondMeta(msg atuin.Message) string {
-	kinds := messageKinds(msg)
+func secondMeta(msg atuin.Message, hidden typeMask) string {
+	kinds := messageKinds(msg, hidden)
 	label := strings.Join(kinds, "+")
 	if label == "" {
 		label = "empty"
@@ -562,10 +610,13 @@ func secondMeta(msg atuin.Message) string {
 	return fmt.Sprintf("%s - %d tokens", label, tokens)
 }
 
-func messageKinds(msg atuin.Message) []string {
+func messageKinds(msg atuin.Message, hidden typeMask) []string {
 	seen := make(map[string]bool, len(msg.Content))
 	var kinds []string
 	for _, block := range msg.Content {
+		if !hidden.shows(categoryOf(block, msg.Role)) {
+			continue
+		}
 		kind := kindName(block.Type)
 		if kind == "" || seen[kind] {
 			continue
