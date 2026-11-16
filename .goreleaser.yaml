@@ -33,7 +33,10 @@ checksum:
   name_template: checksums.txt
 
 changelog:
-  disable: true
+  use: git
+  filters:
+    exclude:
+      - "^Merge"
 
 release:
   draft: false
