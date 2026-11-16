@@ -15,7 +15,7 @@ func TestTableColumnsLineUp(t *testing.T) {
 	threads := sampleThreads()
 
 	for _, width := range []int{120, 100, 99, 80, 56, 55, 42, 41, 38, 37, 24} {
-		layout := newListLayout(width, widestMessages(threads))
+		layout := newListLayout(width, measureThreads(threads))
 		header := plain(layout.header())
 		rule := plain(layout.rule())
 
@@ -36,25 +36,26 @@ func TestTableColumnsLineUp(t *testing.T) {
 }
 
 func TestTableDropsColumns(t *testing.T) {
+	// Long content on every axis, so the table needs the full width and the
+	// columns have to give way.
+	wide := listMetrics{msgs: 969, agent: 5, title: 120, dir: 40}
+
 	cases := []struct {
 		width int
 		want  []string
 		drop  []string
 	}{
-		{120, []string{"date", "ag", "msgs", "dir"}, nil},
-		{100, []string{"date", "ag", "msgs", "dir"}, nil},
-		{99, []string{"date", "ag", "msgs"}, []string{"dir"}},
-		{80, []string{"date", "ag", "msgs"}, []string{"dir"}},
-		{56, []string{"date", "ag", "msgs"}, []string{"dir"}},
-		{55, []string{"ag", "msgs"}, []string{"date"}},
-		{42, []string{"ag", "msgs"}, []string{"date"}},
-		{41, []string{"msgs"}, []string{"date", "ag"}},
-		{38, []string{"msgs"}, []string{"date", "ag"}},
-		{37, nil, []string{"date", "ag", "msgs"}},
+		{120, []string{"date", "agent", "msgs", "dir"}, nil},
+		{100, []string{"date", "agent", "msgs", "dir"}, nil},
+		{69, []string{"date", "agent", "msgs", "dir"}, nil},
+		{68, []string{"date", "agent", "msgs"}, []string{"dir"}},
+		{55, []string{"agent", "msgs"}, []string{"date", "dir"}},
+		{44, []string{"msgs"}, []string{"date", "agent", "dir"}},
+		{37, nil, []string{"date", "agent", "msgs", "dir"}},
 	}
 
 	for _, tc := range cases {
-		header := plain(newListLayout(tc.width, 969).header())
+		header := plain(newListLayout(tc.width, wide).header())
 		for _, want := range tc.want {
 			if !strings.Contains(header, want) {
 				t.Errorf("width %d: header %q misses %q", tc.width, header, want)
@@ -65,35 +66,83 @@ func TestTableDropsColumns(t *testing.T) {
 				t.Errorf("width %d: header %q still shows %q", tc.width, header, drop)
 			}
 		}
+		if got := lipgloss.Width(header); got > tc.width {
+			t.Errorf("width %d: header is %d cells: %q", tc.width, got, header)
+		}
+	}
+}
+
+func TestTableTitleFollowsContent(t *testing.T) {
+	threads := sampleThreads()
+	layout := newListLayout(120, measureThreads(threads))
+
+	if layout.title != lipgloss.Width("OpenSpec and Beans project bootstrap") {
+		t.Errorf("title column = %d cells, want the longest title", layout.title)
+	}
+	if layout.total() >= 120 {
+		t.Errorf("table is %d cells on a 120 cell screen, want room to spare", layout.total())
+	}
+	if row := plain(layout.row(threads[0], false)); !strings.Contains(row, "atuin-threads-tui") {
+		t.Errorf("directory is cut although the title left room: %q", row)
+	}
+}
+
+func TestTableTitleIsCapped(t *testing.T) {
+	long := atuin.Thread{Title: strings.Repeat("x", 200), CWD: "/tmp/some-project-name"}
+	layout := newListLayout(200, measureThreads([]atuin.Thread{long}))
+
+	if layout.title != titleMax {
+		t.Errorf("title column = %d cells, want the cap of %d", layout.title, titleMax)
+	}
+	if layout.dir != lipgloss.Width("some-project-name") {
+		t.Errorf("dir column = %d cells, want the basename width", layout.dir)
+	}
+}
+
+func TestTableAgentColumnFollowsCode(t *testing.T) {
+	threads := []atuin.Thread{
+		{Harness: "opencode", Title: "a"},
+		{Harness: "opencode-fork", Title: "b"},
+	}
+	layout := newListLayout(120, measureThreads(threads))
+
+	if layout.agent != agentMaxWidth {
+		t.Errorf("agent column = %d cells, want %d", layout.agent, agentMaxWidth)
+	}
+	if header := plain(layout.header()); !strings.Contains(header, "agent") {
+		t.Errorf("header does not grow with the column: %q", header)
+	}
+	if row := plain(layout.row(threads[1], false)); !strings.Contains(row, "openc") {
+		t.Errorf("agent code is not shown in full: %q", row)
 	}
 }
 
 func TestTableRowCells(t *testing.T) {
 	thread := sampleThreads()[0]
-	layout := newListLayout(120, 969)
+	layout := newListLayout(120, measureThreads(sampleThreads()))
 	row := plain(layout.row(thread, true))
 	header := plain(layout.header())
 
 	if !strings.HasPrefix(row, "> 2cf53ec4  ") {
 		t.Errorf("row prefix = %q", row[:14])
 	}
-	if got := strings.Index(row, "OpenSpec and Beans project bootstrap"); got != 30 {
-		t.Errorf("title starts at %d, want 30: %q", got, row)
+	if got := strings.Index(row, "27"); got != 32 {
+		t.Errorf("msgs starts at %d, want 32: %q", got, row)
 	}
-	if got := strings.Index(row, "27"); got != 98 {
-		t.Errorf("msgs starts at %d, want 98: %q", got, row)
+	if got := strings.Index(row, "OpenSpec and Beans project bootstrap"); got != 36 {
+		t.Errorf("title starts at %d, want 36: %q", got, row)
 	}
-	if got := strings.Index(row, "atuin-threads-tui"); got != 102 {
-		t.Errorf("dir starts at %d, want 102: %q", got, row)
+	if got := strings.Index(row, "atuin-threads-tui"); got != 74 {
+		t.Errorf("dir starts at %d, want 74: %q", got, row)
 	}
-	if got := strings.Index(header, "title"); got != 30 {
-		t.Errorf("title header starts at %d, want 30: %q", got, header)
+	if got := strings.Index(header, "msgs"); got != 30 {
+		t.Errorf("msgs header starts at %d, want 30: %q", got, header)
 	}
-	if got := strings.Index(header, "msgs"); got != 96 {
-		t.Errorf("msgs header starts at %d, want 96: %q", got, header)
+	if got := strings.Index(header, "title"); got != 36 {
+		t.Errorf("title header starts at %d, want 36: %q", got, header)
 	}
-	if got := strings.Index(header, "dir"); got != 102 {
-		t.Errorf("dir header starts at %d, want 102: %q", got, header)
+	if got := strings.Index(header, "dir"); got != 74 {
+		t.Errorf("dir header starts at %d, want 74: %q", got, header)
 	}
 }
 
@@ -102,10 +151,13 @@ func TestTableWideTitleTruncates(t *testing.T) {
 	thread.Title = strings.Repeat("wide title ", 20)
 
 	for _, width := range []int{120, 80} {
-		layout := newListLayout(width, 27)
+		layout := newListLayout(width, measureThreads([]atuin.Thread{thread}))
 		row := plain(layout.row(thread, false))
-		if lipgloss.Width(row) != width {
-			t.Errorf("width %d: row is %d cells: %q", width, lipgloss.Width(row), row)
+		if got := lipgloss.Width(row); got != layout.total() {
+			t.Errorf("width %d: row is %d cells, table is %d", width, got, layout.total())
+		}
+		if lipgloss.Width(row) > width {
+			t.Errorf("width %d: row is %d cells", width, lipgloss.Width(row))
 		}
 		if !strings.Contains(row, "…") {
 			t.Errorf("width %d: title was not truncated: %q", width, row)
@@ -122,6 +174,8 @@ func TestAgentTag(t *testing.T) {
 		{"claude-code", "cc"},
 		{"OpenCode", "oc"},
 		{"codex", "co"},
+		{"opencode-fork", "openc"},
+		{"cursor-agent-with-a-long-name", "curso"},
 		{"", "--"},
 		{"  ", "--"},
 		{"x", "x"},
@@ -234,7 +288,7 @@ func TestListViewShowsTableHeader(t *testing.T) {
 	if !strings.Contains(lines[2], "────") {
 		t.Errorf("rule row missing:\n%s", plain(m.View()))
 	}
-	if !strings.Contains(lines[3], "OpenSpec and Beans project") {
+	if !strings.Contains(lines[3], "OpenSpec and Beans") {
 		t.Errorf("first thread row missing:\n%s", plain(m.View()))
 	}
 }

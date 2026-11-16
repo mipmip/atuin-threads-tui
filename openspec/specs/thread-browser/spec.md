@@ -103,16 +103,38 @@ The program SHALL quit on `q` in the list and on `ctrl+c` anywhere.
 
 ### Requirement: Present threads as a table
 
-The list SHALL render threads as aligned columns under a fixed header row, with
-a marker, the short id, the update date, an agent tag, the title, the message
-count, and the directory. Every row SHALL occupy the same display width, and
-the header SHALL use the same column positions as the rows.
+The list SHALL render threads as aligned columns under a fixed header row, in
+this order: a marker, the short id, the update date, the agent code, the message
+count, the title, and the directory. The title column SHALL be the width of the
+longest title in view, clamped between 20 and 48 cells. The directory column
+SHALL be the width of the longest directory basename in view, clamped between 8
+and 24 cells. The agent column SHALL be the width of the longest agent code in
+view, clamped between 2 and 5 cells. Every row SHALL occupy the same display
+width as the header, and that width SHALL be the sum of the columns and their
+gutters rather than the terminal width.
 
 #### Scenario: Columns line up
 
 - **WHEN** the list renders threads with titles of different lengths
-- **THEN** the id, date, agent, message count, and directory columns start at
-  the same offset on every row and under the header
+- **THEN** the date, agent, message count, title, and directory columns start
+  at the same offset on every row and under the header
+
+#### Scenario: Title follows the content
+
+- **WHEN** the longest title in view is 36 cells
+- **THEN** the title column is 36 cells, the table is narrower than the
+  terminal, and no directory name is cut
+
+#### Scenario: Title is capped
+
+- **WHEN** the longest title in view is longer than 48 cells
+- **THEN** the title column is 48 cells and longer titles are cut with an
+  ellipsis
+
+#### Scenario: Directory follows the content
+
+- **WHEN** the longest directory basename in view is 22 cells
+- **THEN** the directory column is 22 cells and the basename is shown in full
 
 #### Scenario: Header stays visible
 
@@ -127,18 +149,20 @@ the header SHALL use the same column positions as the rows.
 
 #### Scenario: Agent tag
 
-- **WHEN** the harness is `opencode`, `claude-code`, `codex`, or empty
-- **THEN** the agent column shows `oc`, `cc`, `co`, and `--`
+- **WHEN** the harness is `opencode`, `claude-code`, `codex`, `opencode-fork`,
+  or empty
+- **THEN** the agent column shows `oc`, `cc`, `co`, `openc`, and `--`
 
 #### Scenario: Directory is the basename
 
 - **WHEN** the working directory is `/home/pim/gh.mipmip/atuin-threads-tui`
 - **THEN** the directory column shows `atuin-threads-tui`, cut from the left
-  when the name is longer than the column
+  only when the name is longer than the column
 
 #### Scenario: Narrow terminal drops columns
 
-- **WHEN** the terminal is narrower than 100 columns
-- **THEN** the directory column is hidden; below 56 columns the date column is
-  hidden, below 42 the agent column, and below 38 the message count column, and
-  the title keeps at least 20 cells while the width allows it
+- **WHEN** the table does not fit the terminal
+- **THEN** the title column shrinks to 20 cells, then the directory column
+  shrinks to 8 cells, and only then the directory, date, agent, and message
+  count columns are dropped in that order, while the title keeps at least one
+  cell

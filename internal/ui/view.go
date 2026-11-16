@@ -16,14 +16,17 @@ import (
 const maxBlockLines = 8
 
 const (
-	markerWidth = 2
-	listGutter  = 2
-	idWidth     = 8
-	dateWidth   = 12
-	agentWidth  = 2
-	msgsWidth   = 4
-	dirWidth    = 18
-	minTitle    = 20
+	markerWidth   = 2
+	listGutter    = 2
+	idWidth       = 8
+	dateWidth     = 12
+	agentMinWidth = 2
+	agentMaxWidth = 5
+	msgsWidth     = 4
+	titleMin      = 20
+	titleMax      = 48
+	dirMin        = 8
+	dirMax        = 24
 )
 
 var (
@@ -85,7 +88,7 @@ func (m Model) body() string {
 		return mutedStyle.Render("no thread matches the filter")
 	}
 
-	layout := newListLayout(m.width, widestMessages(threads))
+	layout := newListLayout(m.width, measureThreads(threads))
 	lines := []string{mutedStyle.Render(layout.header())}
 	if m.bodyHeight() >= 2 {
 		lines = append(lines, mutedStyle.Render(layout.rule()))
@@ -169,37 +172,59 @@ type listLayout struct {
 	id    int
 	date  int
 	agent int
-	title int
 	msgs  int
+	title int
 	dir   int
 }
 
-func newListLayout(width, widest int) listLayout {
+type listMetrics struct {
+	msgs  int
+	agent int
+	title int
+	dir   int
+}
+
+func measureThreads(threads []atuin.Thread) listMetrics {
+	var m listMetrics
+	for _, t := range threads {
+		m.msgs = max(m.msgs, t.MessageCount)
+		m.agent = max(m.agent, ansi.StringWidth(agentTag(t.Harness)))
+		m.title = max(m.title, ansi.StringWidth(titleLabel(t)))
+		m.dir = max(m.dir, ansi.StringWidth(dirLabel(t.CWD)))
+	}
+	return m
+}
+
+func newListLayout(width int, m listMetrics) listLayout {
 	l := listLayout{
 		width: width,
 		id:    idWidth,
 		date:  dateWidth,
-		agent: agentWidth,
-		msgs:  max(msgsWidth, len(strconv.Itoa(widest))),
-		dir:   dirWidth,
+		agent: clamp(m.agent, agentMinWidth, agentMaxWidth),
+		msgs:  max(msgsWidth, len(strconv.Itoa(m.msgs))),
+		title: clamp(m.title, titleMin, titleMax),
+		dir:   clamp(m.dir, dirMin, dirMax),
 	}
-	if width < 100 {
-		l.dir = 0
+
+	for l.total() > width && l.title > titleMin {
+		l.title--
+	}
+	for l.total() > width && l.dir > dirMin {
+		l.dir--
 	}
 	for _, column := range []*int{&l.dir, &l.date, &l.agent, &l.msgs} {
-		l.title = max(1, width-l.fixed())
-		if l.title >= minTitle {
+		if l.total() <= width {
 			break
 		}
 		*column = 0
 	}
-	l.title = max(1, width-l.fixed())
+	l.title = max(1, min(l.title, width-l.fixed()))
 	return l
 }
 
 func (l listLayout) fixed() int {
-	width := markerWidth + l.id + listGutter
-	for _, column := range []int{l.date, l.agent, l.msgs, l.dir} {
+	width := markerWidth + l.id
+	for _, column := range []int{l.date, l.agent, l.msgs} {
 		if column > 0 {
 			width += listGutter + column
 		}
@@ -207,13 +232,21 @@ func (l listLayout) fixed() int {
 	return width
 }
 
+func (l listLayout) total() int {
+	width := l.fixed() + listGutter + l.title
+	if l.dir > 0 {
+		width += listGutter + l.dir
+	}
+	return width
+}
+
 func (l listLayout) header() string {
-	return l.line("  ", "id", "date", "ag", "title", "msgs", "dir")
+	return l.line("  ", "id", "date", agentHeader(l.agent), "msgs", "title", "dir")
 }
 
 func (l listLayout) rule() string {
 	rule := func(n int) string { return strings.Repeat("─", n) }
-	return l.line("  ", rule(l.id), rule(l.date), rule(l.agent), rule(l.title), rule(l.msgs), rule(l.dir))
+	return l.line("  ", rule(l.id), rule(l.date), rule(l.agent), rule(l.msgs), rule(l.title), rule(l.dir))
 }
 
 func (l listLayout) row(t atuin.Thread, selected bool) string {
@@ -227,8 +260,8 @@ func (l listLayout) row(t atuin.Thread, selected bool) string {
 		shortID(t.AtuinID),
 		dateLabel(t),
 		agentTag(t.Harness),
-		titleLabel(t),
 		strconv.Itoa(t.MessageCount),
+		titleLabel(t),
 		tailTruncate(dirLabel(t.CWD), l.dir),
 	)
 	if selected {
@@ -237,39 +270,47 @@ func (l listLayout) row(t atuin.Thread, selected bool) string {
 	return line
 }
 
-func (l listLayout) line(marker, id, date, agent, title, msgs, dir string) string {
+func (l listLayout) line(marker, id, date, agent, msgs, title, dir string) string {
+	gutter := strings.Repeat(" ", listGutter)
 	var b strings.Builder
 	b.WriteString(marker)
 	b.WriteString(padRight(id, l.id))
 	if l.date > 0 {
-		b.WriteString(strings.Repeat(" ", listGutter))
+		b.WriteString(gutter)
 		b.WriteString(padRight(date, l.date))
 	}
 	if l.agent > 0 {
-		b.WriteString(strings.Repeat(" ", listGutter))
+		b.WriteString(gutter)
 		b.WriteString(padRight(agent, l.agent))
 	}
-	b.WriteString(strings.Repeat(" ", listGutter))
-	b.WriteString(padRight(title, l.title))
 	if l.msgs > 0 {
-		b.WriteString(strings.Repeat(" ", listGutter))
+		b.WriteString(gutter)
 		b.WriteString(padLeft(msgs, l.msgs))
 	}
+	b.WriteString(gutter)
+	b.WriteString(padRight(title, l.title))
 	if l.dir > 0 {
-		b.WriteString(strings.Repeat(" ", listGutter))
+		b.WriteString(gutter)
 		b.WriteString(padRight(dir, l.dir))
 	}
 	return ansi.Truncate(b.String(), l.width, "")
 }
 
-func widestMessages(threads []atuin.Thread) int {
-	widest := 0
-	for _, t := range threads {
-		if t.MessageCount > widest {
-			widest = t.MessageCount
-		}
+func agentHeader(width int) string {
+	if width >= agentMaxWidth {
+		return "agent"
 	}
-	return widest
+	return "ag"
+}
+
+func clamp(v, low, high int) int {
+	if v < low {
+		return low
+	}
+	if v > high {
+		return high
+	}
+	return v
 }
 
 func dateLabel(t atuin.Thread) string {
@@ -289,12 +330,14 @@ func agentTag(harness string) string {
 		return "oc"
 	case "claude-code":
 		return "cc"
+	case "codex":
+		return "co"
 	}
 	runes := []rune(name)
-	if len(runes) <= 2 {
-		return name
+	if len(runes) > agentMaxWidth {
+		return string(runes[:agentMaxWidth])
 	}
-	return string(runes[:2])
+	return name
 }
 
 func titleLabel(t atuin.Thread) string {

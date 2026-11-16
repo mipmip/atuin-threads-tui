@@ -144,7 +144,7 @@ func TestLoadAndNavigate(t *testing.T) {
 	m := loaded(t, &fakeSource{threads: sampleThreads()})
 
 	view := plain(m.View())
-	for _, want := range []string{"3 threads", "OpenSpec and Beans project bootstrap", "(untitled)", "> "} {
+	for _, want := range []string{"3 threads", "OpenSpec and Beans", "(untitled)", "> "} {
 		if !strings.Contains(view, want) {
 			t.Errorf("view missing %q:\n%s", want, view)
 		}
@@ -344,12 +344,12 @@ func TestThreadRowFitsWidth(t *testing.T) {
 	thread := sampleThreads()[0]
 
 	for _, width := range []int{10, 40, 120} {
-		row := plain(newListLayout(width, 969).row(thread, true))
+		row := plain(newListLayout(width, measureThreads(sampleThreads())).row(thread, true))
 		if got := lipgloss.Width(row); got > width {
 			t.Errorf("row width = %d, want <= %d: %q", got, width, row)
 		}
 	}
-	if !strings.HasPrefix(plain(newListLayout(80, 969).row(thread, true)), "> ") {
+	if !strings.HasPrefix(plain(newListLayout(80, measureThreads(sampleThreads())).row(thread, true)), "> ") {
 		t.Error("selected row has no marker")
 	}
 }
