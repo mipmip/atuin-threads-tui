@@ -109,7 +109,7 @@ count, the title, and the directory. The title column SHALL be the width of the
 longest title in view, clamped between 20 and 48 cells. The directory column
 SHALL be the width of the longest directory basename in view, clamped between 8
 and 24 cells. The agent column SHALL be the width of the longest agent code in
-view, clamped between 2 and 5 cells. Every row SHALL occupy the same display
+view, clamped between 2 and 6 cells. Every row SHALL occupy the same display
 width as the header, and that width SHALL be the sum of the columns and their
 gutters rather than the terminal width.
 
@@ -149,9 +149,10 @@ gutters rather than the terminal width.
 
 #### Scenario: Agent tag
 
-- **WHEN** the harness is `opencode`, `claude-code`, `codex`, `opencode-fork`,
-  or empty
-- **THEN** the agent column shows `oc`, `cc`, `co`, `openc`, and `--`
+- **WHEN** the harness is `claude-code`, `opencode`, `codex`, `pi`,
+  `opencode-fork`, or empty
+- **THEN** the agent column shows `claude`, `ocode`, `codex`, `pi`, `openco`,
+  and `--`
 
 #### Scenario: Directory is the basename
 

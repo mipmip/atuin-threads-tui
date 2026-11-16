@@ -21,7 +21,7 @@ const (
 	idWidth       = 8
 	dateWidth     = 12
 	agentMinWidth = 2
-	agentMaxWidth = 5
+	agentMaxWidth = 6
 	msgsWidth     = 4
 	titleMin      = 20
 	titleMax      = 48
@@ -326,12 +326,14 @@ func agentTag(harness string) string {
 	switch name {
 	case "":
 		return "--"
-	case "opencode":
-		return "oc"
 	case "claude-code":
-		return "cc"
+		return "claude"
+	case "opencode":
+		return "ocode"
 	case "codex":
-		return "co"
+		return "codex"
+	case "pi":
+		return "pi"
 	}
 	runes := []rune(name)
 	if len(runes) > agentMaxWidth {

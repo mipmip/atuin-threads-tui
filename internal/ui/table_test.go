@@ -38,7 +38,7 @@ func TestTableColumnsLineUp(t *testing.T) {
 func TestTableDropsColumns(t *testing.T) {
 	// Long content on every axis, so the table needs the full width and the
 	// columns have to give way.
-	wide := listMetrics{msgs: 969, agent: 5, title: 120, dir: 40}
+	wide := listMetrics{msgs: 969, agent: 6, title: 120, dir: 40}
 
 	cases := []struct {
 		width int
@@ -47,10 +47,13 @@ func TestTableDropsColumns(t *testing.T) {
 	}{
 		{120, []string{"date", "agent", "msgs", "dir"}, nil},
 		{100, []string{"date", "agent", "msgs", "dir"}, nil},
-		{69, []string{"date", "agent", "msgs", "dir"}, nil},
-		{68, []string{"date", "agent", "msgs"}, []string{"dir"}},
-		{55, []string{"agent", "msgs"}, []string{"date", "dir"}},
-		{44, []string{"msgs"}, []string{"date", "agent", "dir"}},
+		{70, []string{"date", "agent", "msgs", "dir"}, nil},
+		{69, []string{"date", "agent", "msgs"}, []string{"dir"}},
+		{60, []string{"date", "agent", "msgs"}, []string{"dir"}},
+		{59, []string{"agent", "msgs"}, []string{"date", "dir"}},
+		{46, []string{"agent", "msgs"}, []string{"date", "dir"}},
+		{45, []string{"msgs"}, []string{"date", "agent", "dir"}},
+		{38, []string{"msgs"}, []string{"date", "agent", "dir"}},
 		{37, nil, []string{"date", "agent", "msgs", "dir"}},
 	}
 
@@ -101,8 +104,9 @@ func TestTableTitleIsCapped(t *testing.T) {
 
 func TestTableAgentColumnFollowsCode(t *testing.T) {
 	threads := []atuin.Thread{
-		{Harness: "opencode", Title: "a"},
-		{Harness: "opencode-fork", Title: "b"},
+		{Harness: "claude-code", Title: "a"},
+		{Harness: "opencode", Title: "b"},
+		{Harness: "opencode-fork", Title: "c"},
 	}
 	layout := newListLayout(120, measureThreads(threads))
 
@@ -112,8 +116,12 @@ func TestTableAgentColumnFollowsCode(t *testing.T) {
 	if header := plain(layout.header()); !strings.Contains(header, "agent") {
 		t.Errorf("header does not grow with the column: %q", header)
 	}
-	if row := plain(layout.row(threads[1], false)); !strings.Contains(row, "openc") {
+	if row := plain(layout.row(threads[0], false)); !strings.Contains(row, "claude") {
 		t.Errorf("agent code is not shown in full: %q", row)
+	}
+	if row := plain(layout.row(threads[2], false)); !strings.Contains(row, "openc") ||
+		strings.Contains(row, "opencode-fork") {
+		t.Errorf("agent code is not cut to the column: %q", row)
 	}
 }
 
@@ -126,23 +134,23 @@ func TestTableRowCells(t *testing.T) {
 	if !strings.HasPrefix(row, "> 2cf53ec4  ") {
 		t.Errorf("row prefix = %q", row[:14])
 	}
-	if got := strings.Index(row, "27"); got != 32 {
-		t.Errorf("msgs starts at %d, want 32: %q", got, row)
+	if got := strings.Index(row, "27"); got != 36 {
+		t.Errorf("msgs starts at %d, want 36: %q", got, row)
 	}
-	if got := strings.Index(row, "OpenSpec and Beans project bootstrap"); got != 36 {
-		t.Errorf("title starts at %d, want 36: %q", got, row)
+	if got := strings.Index(row, "OpenSpec and Beans project bootstrap"); got != 40 {
+		t.Errorf("title starts at %d, want 40: %q", got, row)
 	}
-	if got := strings.Index(row, "atuin-threads-tui"); got != 74 {
-		t.Errorf("dir starts at %d, want 74: %q", got, row)
+	if got := strings.Index(row, "atuin-threads-tui"); got != 78 {
+		t.Errorf("dir starts at %d, want 78: %q", got, row)
 	}
-	if got := strings.Index(header, "msgs"); got != 30 {
-		t.Errorf("msgs header starts at %d, want 30: %q", got, header)
+	if got := strings.Index(header, "msgs"); got != 34 {
+		t.Errorf("msgs header starts at %d, want 34: %q", got, header)
 	}
-	if got := strings.Index(header, "title"); got != 36 {
-		t.Errorf("title header starts at %d, want 36: %q", got, header)
+	if got := strings.Index(header, "title"); got != 40 {
+		t.Errorf("title header starts at %d, want 40: %q", got, header)
 	}
-	if got := strings.Index(header, "dir"); got != 74 {
-		t.Errorf("dir header starts at %d, want 74: %q", got, header)
+	if got := strings.Index(header, "dir"); got != 78 {
+		t.Errorf("dir header starts at %d, want 78: %q", got, header)
 	}
 }
 
@@ -170,12 +178,14 @@ func TestAgentTag(t *testing.T) {
 		harness string
 		want    string
 	}{
-		{"opencode", "oc"},
-		{"claude-code", "cc"},
-		{"OpenCode", "oc"},
-		{"codex", "co"},
-		{"opencode-fork", "openc"},
-		{"cursor-agent-with-a-long-name", "curso"},
+		{"claude-code", "claude"},
+		{"opencode", "ocode"},
+		{"OpenCode", "ocode"},
+		{"codex", "codex"},
+		{"pi", "pi"},
+		{"opencode-fork", "openco"},
+		{"claude-code-enterprise", "claude"},
+		{"cursor-agent-with-a-long-name", "cursor"},
 		{"", "--"},
 		{"  ", "--"},
 		{"x", "x"},
