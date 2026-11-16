@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -65,6 +66,27 @@ func TestRun(t *testing.T) {
 				t.Errorf("stderr = %q, want it to contain %q", stderr.String(), tc.wantStderr)
 			}
 		})
+	}
+}
+
+func TestVersionComesFromFile(t *testing.T) {
+	content, err := os.ReadFile("VERSION")
+	if err != nil {
+		t.Fatalf("reading VERSION: %v", err)
+	}
+	want := strings.TrimSpace(string(content))
+	if want == "" {
+		t.Fatal("VERSION is empty")
+	}
+	if version != want {
+		t.Fatalf("version = %q, want %q", version, want)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--version"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if got := stdout.String(); got != "att "+want+"\n" {
+		t.Fatalf("stdout = %q, want %q", got, "att "+want+"\n")
 	}
 }
 

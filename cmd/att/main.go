@@ -1,11 +1,13 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -13,7 +15,10 @@ import (
 	"github.com/mipmip/atuin-threads-tui/internal/ui"
 )
 
-const version = "0.1.0"
+//go:embed VERSION
+var versionFile string
+
+var version = strings.TrimSpace(versionFile)
 
 const usage = `att - browse atuin threads
 

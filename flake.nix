@@ -13,7 +13,8 @@
       packages = forAllSystems (pkgs: {
         default = pkgs.buildGoModule {
           pname = "att";
-          version = "0.1.0";
+          version =
+            pkgs.lib.removeSuffix "\n" (pkgs.lib.fileContents ./cmd/att/VERSION);
           src = pkgs.lib.cleanSource ./.;
           subPackages = [ "cmd/att" ];
           vendorHash = null;
