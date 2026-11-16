@@ -34,6 +34,10 @@ type searchMsg struct {
 	err     error
 }
 
+type detailRenderedMsg struct {
+	rendering detailRendering
+}
+
 // Model is the bubbletea model for the browser.
 type Model struct {
 	source atuin.Source
@@ -46,6 +50,9 @@ type Model struct {
 	mode         mode
 	conversation atuin.Conversation
 	detailScroll int
+	detail       detailRendering
+	rendering    bool
+	builds       int
 
 	filter      string
 	filterInput string
@@ -105,9 +112,13 @@ func (m Model) selected() (atuin.Thread, bool) {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		widthChanged := msg.Width != m.width
 		m.width = msg.Width
 		m.height = msg.Height
 		m.clampCursor()
+		if m.mode == modeDetail && (widthChanged || !m.detail.built) {
+			return m.startDetail()
+		}
 		m.clampScroll()
 		return m, nil
 
@@ -131,6 +142,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.conversation = msg.conversation
 		m.mode = modeDetail
 		m.detailScroll = 0
+		return m.startDetail()
+
+	case detailRenderedMsg:
+		if m.mode != modeDetail || msg.rendering.width != m.width {
+			return m, nil
+		}
+		m.rendering = false
+		m.detail = msg.rendering
+		m.clampScroll()
 		return m, nil
 
 	case searchMsg:
@@ -149,6 +169,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.mode != modeFilter && len(msg.Runes) > 1 {
+			for _, r := range msg.Runes {
+				updated, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}, Alt: msg.Alt})
+				m = updated.(Model)
+				if cmd != nil {
+					return m, cmd
+				}
+			}
+			return m, nil
+		}
 		return m.handleKey(msg)
 	}
 
@@ -224,6 +254,8 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	case "q", "esc", "left", "h":
 		m.mode = modeList
 		m.err = nil
+		m.detail = detailRendering{}
+		m.rendering = false
 		return m, nil
 	case "j", "down":
 		m.detailScroll++
@@ -236,7 +268,7 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	case "g", "home":
 		m.detailScroll = 0
 	case "G", "end":
-		m.detailScroll = len(m.detailLines())
+		m.detailScroll = m.detailTotal()
 	}
 
 	m.clampScroll()
@@ -276,7 +308,7 @@ func (m *Model) clampCursor() {
 }
 
 func (m *Model) clampScroll() {
-	maxScroll := len(m.detailLines()) - m.bodyHeight()
+	maxScroll := m.detailTotal() - m.bodyHeight()
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
@@ -285,6 +317,42 @@ func (m *Model) clampScroll() {
 	}
 	if m.detailScroll < 0 {
 		m.detailScroll = 0
+	}
+}
+
+func (m Model) detailTotal() int {
+	if m.detail.built {
+		return m.detail.total
+	}
+	return 0
+}
+
+// startDetail renders the open conversation, in the background when it is too
+// large to do without blocking the interface.
+func (m Model) startDetail() (tea.Model, tea.Cmd) {
+	m.builds++
+	m.detail = detailRendering{}
+	m.rendering = false
+
+	if len(m.conversation.Messages) <= detailSyncMessages {
+		m.detail = m.buildDetail()
+		m.clampScroll()
+		return m, nil
+	}
+
+	m.rendering = true
+	return m, m.renderDetail()
+}
+
+func (m Model) renderDetail() tea.Cmd {
+	model := Model{
+		mode:         modeDetail,
+		width:        m.width,
+		conversation: m.conversation,
+		now:          m.now,
+	}
+	return func() tea.Msg {
+		return detailRenderedMsg{rendering: model.buildDetail()}
 	}
 }
 

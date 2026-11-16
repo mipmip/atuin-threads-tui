@@ -8,6 +8,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The conversation view renders a thread once and scrolls from that cache, so
+  reading a long conversation no longer re-renders thousands of messages on
+  every key press. Threads over 500 messages render in the background.
 - The conversation view is a two column layout: the message body on the left at
   a fixed reading width, and the time, author, kind, and token count in a meta
   column on the right.
@@ -15,6 +18,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   output keeps its indentation.
 - Runs of empty attachment messages collapse into one counted row, and thinking
   placeholders give way to a token count.
+
+### Fixed
+
+- Several keys that arrive in one input batch now each count, so a fast scroll
+  is no longer swallowed.
+
 
 ### Added
 

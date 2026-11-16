@@ -106,16 +106,14 @@ func (m Model) body() string {
 }
 
 func (m Model) detailBody() string {
-	lines := m.detailLines()
-	start := m.detailScroll
-	if start > len(lines) {
-		start = len(lines)
+	if m.rendering || !m.detail.built {
+		return mutedStyle.Render(fmt.Sprintf("rendering %d messages...", len(m.conversation.Messages)))
 	}
-	end := start + m.bodyHeight()
-	if end > len(lines) {
-		end = len(lines)
+	lines := m.detail.slice(m.detailScroll, m.bodyHeight())
+	if len(lines) == 0 {
+		return ""
 	}
-	return strings.Join(lines[start:end], "\n")
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) status() string {
@@ -131,12 +129,19 @@ func (m Model) status() string {
 		}
 		return mutedStyle.Render("filter: ") + m.filterInput + "▌" + mutedStyle.Render("  "+counts)
 	case modeDetail:
+		if m.rendering || !m.detail.built {
+			return mutedStyle.Render(fmt.Sprintf(
+				"%s · %d messages · rendering",
+				shortID(m.conversation.Session.AtuinID),
+				len(m.conversation.Messages),
+			))
+		}
 		return mutedStyle.Render(fmt.Sprintf(
 			"%s · %d messages · line %d of %d",
 			shortID(m.conversation.Session.AtuinID),
 			len(m.conversation.Messages),
 			m.detailScroll+1,
-			len(m.detailLines()),
+			m.detail.total,
 		))
 	}
 

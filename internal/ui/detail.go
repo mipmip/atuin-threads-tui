@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/mipmip/atuin-threads-tui/internal/atuin"
 )
@@ -20,6 +21,9 @@ const (
 	detailBodyMin   = 20
 	maxToolPayload  = 4
 	maxMessageParts = 2
+
+	// detailSyncMessages is the largest conversation rendered inside Update.
+	detailSyncMessages = 500
 )
 
 type detailLayout struct {
@@ -43,19 +47,100 @@ type messageView struct {
 	meta [2]string
 }
 
-func (m Model) detailLines() []string {
-	if m.mode != modeDetail {
+// detailBlock is one message, or one collapsed run, and the lines it occupies.
+type detailBlock struct {
+	start int
+	lines []string
+}
+
+// detailRendering is a conversation rendered for one terminal width.
+type detailRendering struct {
+	width  int
+	built  bool
+	head   []string
+	blocks []detailBlock
+	total  int
+}
+
+func (r detailRendering) add(lines []string) detailRendering {
+	if len(lines) == 0 {
+		return r
+	}
+	r.blocks = append(r.blocks, detailBlock{start: r.total, lines: lines})
+	r.total += len(lines)
+	return r
+}
+
+// slice returns the lines between from and from+count, reading only the blocks
+// that overlap that range.
+func (r detailRendering) slice(from, count int) []string {
+	if !r.built || count <= 0 || from < 0 || from >= r.total {
 		return nil
+	}
+	end := from + count
+	if end > r.total {
+		end = r.total
+	}
+
+	out := make([]string, 0, end-from)
+	if from < len(r.head) {
+		stop := min(len(r.head), end)
+		out = append(out, r.head[from:stop]...)
+	}
+
+	first := sort.Search(len(r.blocks), func(i int) bool {
+		block := r.blocks[i]
+		return block.start+len(block.lines) > from
+	})
+	for i := first; i < len(r.blocks) && len(out) < end-from; i++ {
+		block := r.blocks[i]
+		lo := max(0, from-block.start)
+		hi := min(len(block.lines), end-block.start)
+		if hi <= lo {
+			continue
+		}
+		out = append(out, block.lines[lo:hi]...)
+	}
+	return out
+}
+
+// all joins every rendered line, which is only needed by tests and callers
+// outside the draw path.
+func (r detailRendering) all() []string {
+	if !r.built {
+		return nil
+	}
+	out := make([]string, 0, r.total)
+	out = append(out, r.head...)
+	for _, block := range r.blocks {
+		out = append(out, block.lines...)
+	}
+	return out
+}
+
+func (m Model) detailLines() []string {
+	return m.buildDetail().all()
+}
+
+func (m Model) buildDetail() detailRendering {
+	if m.mode != modeDetail {
+		return detailRendering{}
 	}
 
 	layout := newDetailLayout(m.width)
 	session := m.conversation.Session
+	now := m.now
+	if now == nil {
+		now = time.Now
+	}
+
+	r := detailRendering{width: m.width, built: true}
 
 	title := strings.TrimSpace(session.Title)
 	if title == "" {
 		title = "(untitled)"
 	}
-	lines := []string{titleStyle.Render(truncate(title, layout.body))}
+	r.head = append(r.head, titleStyle.Render(truncate(title, layout.body)))
 
 	var header []string
 	if session.Harness != "" {
@@ -71,15 +156,16 @@ func (m Model) detailLines() []string {
 		header = append(header, fmt.Sprintf("%d msgs", session.MessageCount))
 	}
 	if !session.UpdatedAt.IsZero() {
-		header = append(header, age(m.now(), session.UpdatedAt)+" ago")
+		header = append(header, age(now(), session.UpdatedAt)+" ago")
 	}
 	if len(header) > 0 {
-		lines = append(lines, mutedStyle.Render(truncate(strings.Join(header, " · "), layout.body)))
+		r.head = append(r.head, mutedStyle.Render(truncate(strings.Join(header, " · "), layout.body)))
 	}
 	if session.CWD != "" {
-		lines = append(lines, mutedStyle.Render(truncate(session.CWD, layout.body)))
+		r.head = append(r.head, mutedStyle.Render(truncate(session.CWD, layout.body)))
 	}
-	lines = append(lines, "")
+	r.head = append(r.head, "")
+	r.total = len(r.head)
 
 	views := make([]messageView, len(m.conversation.Messages))
 	for i, msg := range m.conversation.Messages {
@@ -93,18 +179,17 @@ func (m Model) detailLines() []string {
 				end++
 			}
 			if end-i >= 2 {
-				lines = append(lines, layout.rows(collapsedView(m.conversation.Messages[i:end], views[i]))...)
-				lines = append(lines, "")
+				lines := append(layout.rows(collapsedView(m.conversation.Messages[i:end], views[i])), "")
+				r = r.add(lines)
 				i = end
 				continue
 			}
 		}
-		lines = append(lines, layout.rows(views[i])...)
-		lines = append(lines, "")
+		r = r.add(append(layout.rows(views[i]), ""))
 		i++
 	}
 
-	return lines
+	return r
 }
 
 func (l detailLayout) rows(view messageView) []string {
@@ -588,16 +673,19 @@ func wrap(text string, width int) []string {
 		}
 
 		line := ""
+		used := 0
 		for _, word := range words {
 			for _, chunk := range splitWidth(word, width) {
+				size := ansi.StringWidth(chunk)
 				switch {
 				case line == "":
-					line = chunk
-				case ansi.StringWidth(line)+1+ansi.StringWidth(chunk) <= width:
+					line, used = chunk, size
+				case used+1+size <= width:
 					line += " " + chunk
+					used += 1 + size
 				default:
 					out = append(out, line)
-					line = chunk
+					line, used = chunk, size
 				}
 			}
 		}
@@ -691,7 +779,7 @@ func expandTabs(line string) string {
 	for _, r := range line {
 		if r != '\t' {
 			b.WriteRune(r)
-			width += ansi.StringWidth(string(r))
+			width += runewidth.RuneWidth(r)
 			continue
 		}
 		spaces := 4 - width%4
@@ -713,7 +801,7 @@ func splitWidth(s string, width int) []string {
 	var current strings.Builder
 	used := 0
 	for _, r := range s {
-		size := ansi.StringWidth(string(r))
+		size := runewidth.RuneWidth(r)
 		if used+size > width && used > 0 {
 			out = append(out, current.String())
 			current.Reset()
