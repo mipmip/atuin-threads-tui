@@ -7,6 +7,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- The conversation view tints alternating messages, marks the cursor message with a pink `>` stripe, and lets `space` mark any number of messages for `y` and `w`.
 
 - `.` narrows the list to threads captured in the current directory and `@` to
   threads from this host, each named in the status line and combinable with the

@@ -192,55 +192,71 @@ func TestSelectMovesByMessage(t *testing.T) {
 	}
 }
 
-func TestSelectionRangeAndCount(t *testing.T) {
+func TestSpaceMarksMessages(t *testing.T) {
 	m := selectMode(t, longConversation())
+	m, _ = pressRune(t, m, ' ')
 	m, _ = pressRune(t, m, 'j')
+	m, _ = pressRune(t, m, ' ')
 	m, _ = pressRune(t, m, 'j')
+	m, _ = pressRune(t, m, ' ')
 
-	lo, hi, ok := m.selectedRange()
-	if !ok {
-		t.Fatal("no range after moving")
+	if got := m.markedCount(); got != 3 {
+		t.Fatalf("marked = %d, want 3", got)
 	}
-	if lo != m.selection[0] || hi != m.selection[2] {
-		t.Fatalf("range = %d..%d, want the first three messages", lo, hi)
-	}
-	if got := m.selectedCount(); got != 3 {
-		t.Fatalf("count = %d, want 3", got)
+	if !m.marked[0] || !m.marked[1] || !m.marked[2] {
+		t.Fatalf("marked = %v, want messages 0, 1 and 2", m.marked)
 	}
 }
 
-func TestSelectBackwardsRange(t *testing.T) {
+func TestSpaceUnmarksAMessage(t *testing.T) {
 	m := selectMode(t, longConversation())
-	m, _ = pressRune(t, m, 'j')
-	m, _ = pressRune(t, m, 'j')
-	m, _ = pressRune(t, m, 'k')
-	m, _ = pressRune(t, m, 'k')
+	m, _ = pressRune(t, m, ' ')
+	m, _ = pressRune(t, m, ' ')
 
-	lo, hi, ok := m.selectedRange()
-	if !ok || lo > hi || lo != m.selection[0] {
-		t.Fatalf("backwards range = %d..%d", lo, hi)
+	if m.markedCount() != 0 {
+		t.Fatalf("marked = %v, want nothing after toggling twice", m.marked)
+	}
+}
+
+func TestMarkingSkipsAroundTheCursor(t *testing.T) {
+	m := selectMode(t, longConversation())
+	m, _ = pressRune(t, m, ' ')
+	m, _ = pressRune(t, m, 'j')
+	m, _ = pressRune(t, m, 'j')
+	m, _ = pressRune(t, m, ' ')
+
+	payload, first, last, count := m.markdownSelection()
+	if count != 2 {
+		t.Fatalf("count = %d, want 2", count)
+	}
+	if first != 0 || last != 2 {
+		t.Fatalf("span = %d..%d, want 0..2", first, last)
+	}
+	if strings.Count(payload, "###") != 2 {
+		t.Fatalf("payload headings = %q", payload)
 	}
 }
 
 func TestSelectMarksTheMargin(t *testing.T) {
 	m := selectMode(t, sampleConversation())
+	m, _ = pressRune(t, m, ' ')
 	m, _ = pressRune(t, m, 'j')
 
-	marks := 0
-	starts := 0
+	stripes := map[rune]int{}
 	for _, line := range strings.Split(plain(m.View()), "\n") {
-		if strings.HasPrefix(line, ">") {
-			marks++
+		runes := []rune(line)
+		if len(runes) == 0 {
+			continue
 		}
-		if strings.HasPrefix(line, "*") {
-			starts++
+		if runes[0] == '#' || runes[0] == '>' {
+			stripes[runes[0]]++
 		}
 	}
-	if marks != 1 {
-		t.Fatalf("cursor markers = %d, want 1", marks)
+	if stripes['#'] < 1 {
+		t.Fatalf("no marked stripe: %v", stripes)
 	}
-	if starts != 1 {
-		t.Fatalf("selection markers = %d, want 1", starts)
+	if stripes['>'] < 1 {
+		t.Fatalf("no cursor stripe: %v", stripes)
 	}
 }
 
@@ -255,6 +271,9 @@ func TestSelectEscLeavesWithoutCopying(t *testing.T) {
 	}
 	if m.selection != nil {
 		t.Fatal("the selection survived escaping")
+	}
+	if m.marked != nil {
+		t.Fatal("the marks survived escaping")
 	}
 	if m.notice != "" {
 		t.Fatalf("notice = %q, want none", m.notice)
@@ -281,6 +300,7 @@ func TestSelectSkipsCollapsedRuns(t *testing.T) {
 
 func TestCopyUsesTheNativeTool(t *testing.T) {
 	m := selectMode(t, sampleConversation())
+	m, _ = pressRune(t, m, ' ')
 
 	var copied string
 	m.lookPath = func(string) (string, error) { return "/bin/wl-copy", nil }
@@ -301,6 +321,7 @@ func TestCopyUsesTheNativeTool(t *testing.T) {
 
 func TestCopyFallsBackToTheTerminal(t *testing.T) {
 	m := selectMode(t, sampleConversation())
+	m, _ = pressRune(t, m, ' ')
 
 	var sequence string
 	m.lookPath = func(string) (string, error) { return "", errors.New("missing") }
@@ -356,6 +377,7 @@ func TestCopyTooLargePointsAtTheFile(t *testing.T) {
 		message("user", atuin.Content{Type: "text", Text: strings.Repeat("x", clipboardLimit+1)}),
 	}}
 	m := selectMode(t, conv)
+	m, _ = pressRune(t, m, ' ')
 	m.lookPath = func(string) (string, error) { return "/bin/wl-copy", nil }
 	m.copyText = func(clipboardTool, string) error {
 		t.Fatal("the clipboard was used for an oversized payload")
@@ -370,6 +392,7 @@ func TestCopyTooLargePointsAtTheFile(t *testing.T) {
 
 func TestWriteSelectionWritesAFile(t *testing.T) {
 	m := selectMode(t, sampleConversation())
+	m, _ = pressRune(t, m, ' ')
 
 	var name, payload string
 	m.writeFile = func(dir, file, text string) (string, error) {
@@ -412,10 +435,11 @@ func TestExportThreadCoversEveryVisibleMessage(t *testing.T) {
 
 func TestSelectStatusAndHints(t *testing.T) {
 	m := selectMode(t, sampleConversation())
+	m, _ = pressRune(t, m, ' ')
 	m, _ = pressRune(t, m, 'j')
 
 	status := plain(m.status())
-	if !strings.Contains(status, "2 selected of") {
+	if !strings.Contains(status, "1 marked of") {
 		t.Fatalf("status = %q", status)
 	}
 	if !strings.Contains(status, "line ") {
@@ -423,7 +447,7 @@ func TestSelectStatusAndHints(t *testing.T) {
 	}
 
 	hints := plain(m.hints())
-	for _, key := range []string{"y copy", "w file", "e thread", "esc back"} {
+	for _, key := range []string{"space mark", "y copy", "w file", "e thread", "esc back"} {
 		if !strings.Contains(hints, key) {
 			t.Fatalf("hints %q lacks %q", hints, key)
 		}

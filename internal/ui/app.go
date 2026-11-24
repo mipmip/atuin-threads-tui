@@ -81,9 +81,9 @@ type Model struct {
 	typesCursor int
 	typesCounts map[typeMask]int
 
-	selectAnchor int
 	selectCursor int
 	selection    []int
+	marked       map[int]bool
 	notice       string
 
 	lookPath  detector

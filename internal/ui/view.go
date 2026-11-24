@@ -127,9 +127,7 @@ func (m Model) detailBody() string {
 	if len(lines) == 0 {
 		return ""
 	}
-	if m.mode == modeSelect {
-		lines = m.markSelection(lines)
-	}
+	lines = m.decorateDetail(lines)
 	return strings.Join(lines, "\n")
 }
 
@@ -192,16 +190,13 @@ func (m Model) status() string {
 		}
 		return mutedStyle.Render("filter: ") + m.filterInput + "▌" + mutedStyle.Render("  "+counts)
 	case modeSelect:
-		if _, _, ok := m.selectedRange(); !ok {
-			return mutedStyle.Render(shortID(m.conversation.Session.AtuinID) + " · nothing selected")
-		}
 		if m.notice != "" {
 			return mutedStyle.Render(m.notice)
 		}
 		return mutedStyle.Render(fmt.Sprintf(
-			"%s · %d selected of %s · line %d of %d",
+			"%s · %d marked of %s · line %d of %d",
 			shortID(m.conversation.Session.AtuinID),
-			m.selectedCount(),
+			m.markedCount(),
 			m.messageCountLabel(),
 			m.detailScroll+1,
 			m.detail.total,
@@ -269,7 +264,7 @@ func (m Model) hints() string {
 	case modeTypes:
 		return mutedStyle.Render("space toggle · a all · n conversation · 1-4 preset · enter apply · esc cancel")
 	case modeSelect:
-		return mutedStyle.Render("j/k message · J/K ten · y copy · w file · e thread · esc back")
+		return mutedStyle.Render("space mark · j/k message · J/K ten · y copy · w file · e thread · esc back")
 	case modeFilter:
 		return mutedStyle.Render("type to filter · enter apply · ctrl+u reset · esc clear")
 	default:

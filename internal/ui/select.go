@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/mipmip/atuin-threads-tui/internal/atuin"
 )
 
 const clipboardLimit = 50 * 1024
@@ -30,36 +33,22 @@ func (m Model) startSelection() Model {
 
 	m.mode = modeSelect
 	m.selection = list
-	m.selectAnchor = anchor
 	m.selectCursor = anchor
+	m.marked = make(map[int]bool)
 	m.notice = ""
 	m = m.revealSelection()
 	return m
 }
 
-func (m Model) selectedRange() (int, int, bool) {
+func (m Model) cursorMessage() int {
 	if m.mode != modeSelect || len(m.selection) == 0 {
-		return 0, 0, false
+		return -1
 	}
-	lo, hi := m.selectAnchor, m.selectCursor
-	if lo > hi {
-		lo, hi = hi, lo
-	}
-	return m.selection[lo], m.selection[hi], true
+	return m.selection[m.selectCursor]
 }
 
-func (m Model) selectedCount() int {
-	lo, hi, ok := m.selectedRange()
-	if !ok {
-		return 0
-	}
-	count := 0
-	for _, msg := range m.selection {
-		if msg >= lo && msg <= hi {
-			count++
-		}
-	}
-	return count
+func (m Model) markedCount() int {
+	return len(m.marked)
 }
 
 func (m Model) revealSelection() Model {
@@ -71,10 +60,12 @@ func (m Model) revealSelection() Model {
 		return m
 	}
 	height := m.bodyHeight()
-	if start < m.detailScroll {
+	switch {
+	case height > 0 && end-start+1 >= height:
 		m.detailScroll = start
-	}
-	if height > 0 && end >= m.detailScroll+height {
+	case start < m.detailScroll:
+		m.detailScroll = start
+	case height > 0 && end >= m.detailScroll+height:
 		m.detailScroll = end - height + 1
 	}
 	m.clampScroll()
@@ -88,6 +79,16 @@ func (m Model) handleSelectKey(key string) (tea.Model, tea.Cmd) {
 	case "esc", "q", "v":
 		m.mode = modeDetail
 		m.selection = nil
+		m.marked = nil
+		return m, nil
+	case " ":
+		if msg := m.cursorMessage(); msg >= 0 {
+			if m.marked[msg] {
+				delete(m.marked, msg)
+			} else {
+				m.marked[msg] = true
+			}
+		}
 		return m, nil
 	case "j", "down":
 		m.selectCursor++
@@ -117,46 +118,104 @@ func (m Model) handleSelectKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) markSelection(lines []string) []string {
-	lo, hi, ok := m.selectedRange()
-	if !ok {
+const (
+	backgroundEven   = "\x1b[48;5;234m"
+	backgroundOdd    = "\x1b[48;5;236m"
+	backgroundCursor = "\x1b[48;5;240m"
+	backgroundMarked = "\x1b[48;5;238m"
+)
+
+func paintBackground(line, background string, width int) string {
+	if width <= 0 {
+		return line
+	}
+	head := ansi.Truncate(line, width, "")
+	rest := ansi.TruncateLeft(line, width, "")
+	if used := ansi.StringWidth(head); used < width {
+		head += strings.Repeat(" ", width-used)
+	}
+	head = strings.ReplaceAll(head, "\x1b[0m", "\x1b[0m"+background)
+	return background + head + "\x1b[0m" + rest
+}
+
+func replaceMarginCell(line, cell, background string) string {
+	return strings.Replace(line, background+" ", background+cell, 1)
+}
+
+func (m Model) decorateDetail(lines []string) []string {
+	layout := newDetailLayout(m.width)
+	width := detailMargin + layout.body
+	if width <= 0 {
 		return lines
 	}
-	cursor := m.selection[m.selectCursor]
+
+	out := make([]string, len(lines))
+	cursor := m.cursorMessage()
 	for i, line := range lines {
-		msg, first := m.detail.lineInfo(m.detailScroll + i)
-		if msg < 0 || !first {
+		msg, _ := m.detail.lineInfo(m.detailScroll + i)
+		if msg < 0 {
+			out[i] = line
 			continue
 		}
-		marker := ""
-		switch {
-		case msg == cursor:
-			marker = ">"
-		case msg >= lo && msg <= hi:
-			marker = "*"
+
+		background := backgroundOdd
+		if msg%2 == 0 {
+			background = backgroundEven
 		}
-		if marker == "" || len(line) == 0 {
-			continue
+		cell := " "
+		if m.mode == modeSelect {
+			switch {
+			case msg == cursor:
+				background = backgroundCursor
+				cell = ">"
+			case m.marked[msg]:
+				background = backgroundMarked
+				cell = "#"
+			}
 		}
-		if line[0] == ' ' {
-			lines[i] = marker + line[1:]
+
+		out[i] = paintBackground(line, background, width)
+		out[i] = replaceMarginCell(out[i], cell, background)
+	}
+	return out
+}
+
+func (m Model) markedMessages() []atuin.Message {
+	if len(m.marked) == 0 {
+		return nil
+	}
+	messages := make([]atuin.Message, 0, len(m.marked))
+	for i, msg := range m.conversation.Messages {
+		if m.marked[i] {
+			messages = append(messages, msg)
 		}
 	}
-	return lines
+	return messages
 }
 
 func (m Model) markdownSelection() (string, int, int, int) {
-	lo, hi, ok := m.selectedRange()
-	if !ok {
+	messages := m.markedMessages()
+	if len(messages) == 0 {
 		return "", 0, 0, 0
 	}
-	payload := exportMarkdown(m.conversation.Messages[lo:hi+1], m.hidden)
-	return payload, lo, hi, m.selectedCount()
+
+	first, last := -1, -1
+	for i := range m.conversation.Messages {
+		if !m.marked[i] {
+			continue
+		}
+		if first < 0 {
+			first = i
+		}
+		last = i
+	}
+	return exportMarkdown(messages, m.hidden), first, last, len(messages)
 }
 
 func (m Model) copySelection() (tea.Model, tea.Cmd) {
 	payload, _, _, count := m.markdownSelection()
 	if count == 0 {
+		m.notice = "nothing marked, press space to mark a message"
 		return m, nil
 	}
 
@@ -192,6 +251,7 @@ func (m Model) copySelection() (tea.Model, tea.Cmd) {
 func (m Model) writeSelection() (tea.Model, tea.Cmd) {
 	payload, lo, hi, count := m.markdownSelection()
 	if count == 0 {
+		m.notice = "nothing marked, press space to mark a message"
 		return m, nil
 	}
 	return m.writeExportFile(payload, lo, hi)
