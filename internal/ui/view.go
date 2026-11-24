@@ -228,18 +228,38 @@ func (m Model) status() string {
 	}
 
 	visible := len(m.visible())
+	if m.listNote != "" {
+		return mutedStyle.Render(m.listNote)
+	}
 	switch {
 	case m.searching:
 		return mutedStyle.Render("searching...")
 	case m.searchQuery != "":
 		return mutedStyle.Render(fmt.Sprintf("%d results for %q", visible, m.searchQuery))
 	case m.filter != "":
-		return mutedStyle.Render(fmt.Sprintf("%d of %d threads", visible, len(m.threads)))
+		return mutedStyle.Render(m.scopePrefix() + fmt.Sprintf("%d of %d threads", visible, len(m.threads)))
 	case m.loading:
 		return mutedStyle.Render("loading")
 	default:
+		if prefix := m.scopePrefix(); prefix != "" {
+			return mutedStyle.Render(prefix + fmt.Sprintf("%d of %d threads", visible, len(m.threads)))
+		}
 		return mutedStyle.Render(fmt.Sprintf("%d threads", len(m.threads)))
 	}
+}
+
+func (m Model) scopePrefix() string {
+	var parts []string
+	if m.scopeDir {
+		parts = append(parts, "dir: "+dirLabel(m.dir))
+	}
+	if m.scopeHost {
+		parts = append(parts, "host: local")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " · ") + " · "
 }
 
 func (m Model) hints() string {
@@ -253,7 +273,7 @@ func (m Model) hints() string {
 	case modeFilter:
 		return mutedStyle.Render("type to filter · enter apply · ctrl+u reset · esc clear")
 	default:
-		return mutedStyle.Render("j/k move · enter read · / filter · ctrl+s full-text · ctrl+r reload · q quit")
+		return mutedStyle.Render("j/k move · / filter · . dir · @ host · ctrl+s search · ctrl+r reload · q quit")
 	}
 }
 

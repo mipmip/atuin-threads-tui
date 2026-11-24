@@ -278,3 +278,44 @@ func TestShowDecodesUsageAndPatchFiles(t *testing.T) {
 		t.Errorf("message without usage decoded tokens: %+v", conversation.Messages[1].Tokens)
 	}
 }
+
+const infoFixture = `name: atuin
+version: 18.24.6
+commit:  NO_GIT
+
+Host info:
+host id: 01a18745351c74618f8f9d94eac717e8
+`
+
+func TestHostReadsInfo(t *testing.T) {
+	var calls []call
+	c := New(WithRunner(fakeRunner(infoFixture, nil, &calls)))
+
+	host, err := c.Host(context.Background())
+	if err != nil {
+		t.Fatalf("Host: %v", err)
+	}
+	if host != "01a18745351c74618f8f9d94eac717e8" {
+		t.Fatalf("host = %q", host)
+	}
+	want := []string{"atuin", "info"}
+	if strings.Join(calls[0].args, " ") != strings.Join(want, " ") {
+		t.Errorf("args = %v, want %v", calls[0].args, want)
+	}
+}
+
+func TestHostWithoutId(t *testing.T) {
+	c := New(WithRunner(fakeRunner("Host info:\nno id here\n", nil, nil)))
+
+	if _, err := c.Host(context.Background()); err == nil {
+		t.Fatal("want an error when atuin info carries no host id")
+	}
+}
+
+func TestHostCommandFailure(t *testing.T) {
+	c := New(WithRunner(fakeRunner("", errors.New("boom"), nil)))
+
+	if _, err := c.Host(context.Background()); err == nil || !strings.Contains(err.Error(), "reading host id") {
+		t.Fatalf("err = %v", err)
+	}
+}

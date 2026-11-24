@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `.` narrows the list to threads captured in the current directory and `@` to
+  threads from this host, each named in the status line and combinable with the
+  text filter and atuin search.
+
+
 ## [0.1.0] - 2026-11-16
 
 ### Added

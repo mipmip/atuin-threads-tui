@@ -29,6 +29,8 @@ type fakeSource struct {
 	searchErr     error
 	searchQuery   string
 	searchLimit   int
+	host          string
+	hostErr       error
 }
 
 func (f *fakeSource) List(context.Context) ([]atuin.Thread, error) {
@@ -38,6 +40,10 @@ func (f *fakeSource) List(context.Context) ([]atuin.Thread, error) {
 func (f *fakeSource) Show(_ context.Context, id string) (atuin.Conversation, error) {
 	f.showID = id
 	return f.conversation, f.showErr
+}
+
+func (f *fakeSource) Host(context.Context) (string, error) {
+	return f.host, f.hostErr
 }
 
 func (f *fakeSource) Search(_ context.Context, query string, limit int) ([]atuin.Thread, error) {
@@ -129,15 +135,29 @@ func pressRune(t *testing.T, m Model, r rune) (Model, tea.Cmd) {
 	return feed(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 }
 
-func loaded(t *testing.T, source *fakeSource) Model {
+func runInit(t *testing.T, m Model) Model {
 	t.Helper()
-	m := New(source)
 	cmd := m.Init()
 	if cmd == nil {
 		t.Fatal("Init returned no command")
 	}
-	m, _ = feed(t, m, cmd())
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			m, _ = feed(t, m, c())
+		}
+		return m
+	}
+	m, _ = feed(t, m, msg)
 	return m
+}
+
+func loaded(t *testing.T, source *fakeSource) Model {
+	t.Helper()
+	return runInit(t, New(source))
 }
 
 func TestLoadAndNavigate(t *testing.T) {
@@ -180,8 +200,7 @@ func TestEmptyAndErrorStates(t *testing.T) {
 		t.Errorf("empty view unexpected:\n%s", view)
 	}
 
-	m = New(&fakeSource{listErr: errors.New("atuin: no such command")})
-	m, _ = feed(t, m, m.Init()())
+	m = runInit(t, New(&fakeSource{listErr: errors.New("atuin: no such command")}))
 	view = plain(m.View())
 	if !strings.Contains(view, "error: atuin: no such command") || !strings.Contains(view, "ctrl+r to retry") {
 		t.Errorf("error view unexpected:\n%s", view)

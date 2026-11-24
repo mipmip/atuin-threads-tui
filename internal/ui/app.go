@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -42,6 +43,11 @@ type copiedMsg struct {
 	terminal bool
 }
 
+type hostMsg struct {
+	host string
+	err  error
+}
+
 type detailRenderedMsg struct {
 	rendering detailRendering
 	anchor    int
@@ -55,6 +61,13 @@ type Model struct {
 	threads []atuin.Thread
 	cursor  int
 	offset  int
+
+	dir       string
+	localHost string
+	hostKnown bool
+	scopeDir  bool
+	scopeHost bool
+	listNote  string
 
 	mode         mode
 	conversation atuin.Conversation
@@ -93,18 +106,27 @@ type Model struct {
 
 // New returns a model that reads threads from source.
 func New(source atuin.Source) Model {
+	dir, _ := os.Getwd()
 	return Model{
 		source:  source,
 		now:     time.Now,
 		loading: true,
 		width:   80,
 		height:  24,
+		dir:     dir,
 	}
 }
 
 // Init starts the first load.
 func (m Model) Init() tea.Cmd {
-	return m.listThreads()
+	return tea.Batch(m.listThreads(), m.readHost())
+}
+
+func (m Model) readHost() tea.Cmd {
+	return func() tea.Msg {
+		host, err := m.source.Host(context.Background())
+		return hostMsg{host: host, err: err}
+	}
 }
 
 func (m Model) listThreads() tea.Cmd {
@@ -145,6 +167,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.startDetail()
 		}
 		m.clampScroll()
+		return m, nil
+
+	case hostMsg:
+		m.localHost = msg.host
+		m.hostKnown = msg.err == nil && msg.host != ""
+		if !m.hostKnown {
+			m.scopeHost = false
+		}
 		return m, nil
 
 	case threadsMsg:
@@ -271,6 +301,20 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			m.err = nil
 			return m, m.searchThreads()
 		}
+	case ".":
+		m.scopeDir = !m.scopeDir
+		m.listNote = ""
+		m.cursor = 0
+		m.offset = 0
+	case "@":
+		if !m.hostKnown {
+			m.listNote = "host unknown: atuin reported no host id"
+			break
+		}
+		m.scopeHost = !m.scopeHost
+		m.listNote = ""
+		m.cursor = 0
+		m.offset = 0
 	case "j", "down":
 		m.cursor++
 	case "k", "up":

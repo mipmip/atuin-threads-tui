@@ -11,15 +11,22 @@ import (
 
 func (m Model) visible() []atuin.Thread {
 	query := strings.ToLower(strings.TrimSpace(m.filter))
-	if query == "" {
+	if query == "" && !m.scopeDir && !m.scopeHost {
 		return m.threads
 	}
 
 	out := make([]atuin.Thread, 0, len(m.threads))
 	for _, thread := range m.threads {
-		if matches(thread, query) {
-			out = append(out, thread)
+		if m.scopeDir && thread.CWD != m.dir {
+			continue
 		}
+		if m.scopeHost && thread.Host != m.localHost {
+			continue
+		}
+		if query != "" && !matches(thread, query) {
+			continue
+		}
+		out = append(out, thread)
 	}
 	return out
 }

@@ -120,3 +120,19 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]Thread,
 	}
 	return threads, nil
 }
+
+// Host returns the id atuin uses for this machine.
+func (c *Client) Host(ctx context.Context) (string, error) {
+	out, err := c.run(ctx, c.binary, "info")
+	if err != nil {
+		return "", fmt.Errorf("reading host id: %w", err)
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "host id:")
+		if ok && strings.TrimSpace(rest) != "" {
+			return strings.TrimSpace(rest), nil
+		}
+	}
+	return "", fmt.Errorf("no host id in atuin info output")
+}

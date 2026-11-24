@@ -76,4 +76,5 @@ type Source interface {
 	List(ctx context.Context) ([]Thread, error)
 	Show(ctx context.Context, id string) (Conversation, error)
 	Search(ctx context.Context, query string, limit int) ([]Thread, error)
+	Host(ctx context.Context) (string, error)
 }
